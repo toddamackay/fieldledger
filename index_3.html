@@ -1,0 +1,1227 @@
+<!DOCTYPE html>
+<html lang="en-CA">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Field Ledger</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zilla+Slab:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #f2f0e8;
+    --paper-line: #dcd8c8;
+    --ink: #1e2a38;
+    --ink-soft: #4a5568;
+    --brass: #a8763e;
+    --brass-dark: #8a5f2f;
+    --ok: #2f6b4f;
+    --warn: #b8863b;
+    --fail: #a33b2f;
+    --card: #fbfaf5;
+    --border: #cfc9b4;
+    --radius: 3px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    background-image: repeating-linear-gradient(
+      to bottom,
+      transparent,
+      transparent 27px,
+      var(--paper-line) 28px
+    );
+    color: var(--ink);
+    font-family: 'Inter', sans-serif;
+    min-height: 100vh;
+  }
+  header {
+    background: var(--ink);
+    color: var(--paper);
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+    border-bottom: 3px solid var(--brass);
+  }
+  header h1 {
+    font-family: 'Zilla Slab', serif;
+    font-weight: 700;
+    font-size: 22px;
+    margin: 0;
+    letter-spacing: 0.3px;
+  }
+  header h1 .stamp {
+    display: inline-block;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    font-weight: 500;
+    background: var(--brass);
+    color: var(--ink);
+    padding: 2px 6px;
+    border-radius: var(--radius);
+    margin-left: 8px;
+    vertical-align: middle;
+    letter-spacing: 0.5px;
+  }
+  .auth-area { display: flex; align-items: center; gap: 12px; }
+  #signInBtn, #signOutBtn {
+    font-family: 'Inter', sans-serif;
+    font-weight: 600;
+    font-size: 13px;
+    padding: 8px 14px;
+    border-radius: var(--radius);
+    border: 1px solid var(--brass);
+    background: transparent;
+    color: var(--paper);
+    cursor: pointer;
+  }
+  #signInBtn:hover, #signOutBtn:hover { background: var(--brass); color: var(--ink); }
+  #statusBar {
+    padding: 8px 20px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12.5px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  #statusBar .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+  .dot-idle { background: #999; }
+  .dot-saving { background: var(--warn); animation: pulse 1s infinite; }
+  .dot-saved { background: var(--ok); }
+  .dot-failed { background: var(--fail); }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+  #retryBtn {
+    font-family: 'Inter', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    border: 1px solid var(--fail);
+    color: var(--fail);
+    background: none;
+    border-radius: var(--radius);
+    padding: 3px 9px;
+    cursor: pointer;
+  }
+  nav.tabs {
+    display: flex;
+    gap: 4px;
+    padding: 12px 20px 0;
+    flex-wrap: wrap;
+  }
+  nav.tabs button {
+    font-family: 'Zilla Slab', serif;
+    font-weight: 600;
+    font-size: 14px;
+    padding: 8px 16px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-bottom: none;
+    border-radius: var(--radius) var(--radius) 0 0;
+    cursor: pointer;
+    color: var(--ink-soft);
+    position: relative;
+    top: 1px;
+  }
+  nav.tabs button.active {
+    color: var(--ink);
+    background: var(--paper);
+    border-bottom: 1px solid var(--paper);
+    box-shadow: 0 -2px 0 var(--brass) inset;
+  }
+  main {
+    padding: 20px;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+  .panel {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 0 var(--radius) var(--radius) var(--radius);
+    padding: 20px;
+    display: none;
+  }
+  .panel.active { display: block; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 14px; }
+  label {
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--ink-soft);
+    margin-bottom: 4px;
+  }
+  input, select, textarea {
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+    padding: 7px 9px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: #fff;
+    color: var(--ink);
+  }
+  textarea { font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; width: 100%; min-height: 140px; }
+  button.action {
+    font-family: 'Inter', sans-serif;
+    font-weight: 600;
+    font-size: 13px;
+    padding: 8px 16px;
+    background: var(--brass);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius);
+    cursor: pointer;
+  }
+  button.action:hover { background: var(--brass-dark); }
+  button.action:disabled { background: #ccc; cursor: not-allowed; }
+  button.ghost {
+    font-family: 'Inter', sans-serif;
+    font-weight: 600;
+    font-size: 12px;
+    padding: 5px 10px;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    cursor: pointer;
+    color: var(--ink-soft);
+  }
+  button.ghost:hover { border-color: var(--brass); color: var(--brass-dark); }
+  .banner {
+    padding: 10px 14px;
+    border-radius: var(--radius);
+    font-size: 13px;
+    margin-bottom: 14px;
+  }
+  .banner.warn { background: #fbf0da; border: 1px solid var(--warn); color: #6b4b1a; }
+  .banner.fail { background: #fbe4e0; border: 1px solid var(--fail); color: #7a2a20; }
+  .banner.info { background: #e7edf5; border: 1px solid #6b84a8; color: #2a3f5c; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--paper-line); }
+  th { font-family: 'IBM Plex Mono', monospace; font-size: 11px; text-transform: uppercase; color: var(--ink-soft); letter-spacing: 0.4px; }
+  .chip {
+    display: inline-block;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    padding: 2px 7px;
+    border-radius: 10px;
+    font-weight: 500;
+  }
+  .chip-low { background: #e2e8ee; color: #445; }
+  .chip-medium { background: #fbe6c4; color: #6b4b1a; }
+  .chip-high { background: #f5d3ce; color: #7a2a20; }
+  .rating-pos { color: var(--ok); font-weight: 600; }
+  .rating-neg { color: var(--fail); font-weight: 600; }
+  .rating-zero { color: var(--ink-soft); }
+  .order-btns button { font-size: 11px; padding: 2px 6px; }
+  #dateNav { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  #dateNav span { font-family: 'IBM Plex Mono', monospace; font-size: 14px; font-weight: 500; }
+  .empty-state {
+    padding: 30px 10px;
+    text-align: center;
+    color: var(--ink-soft);
+    font-size: 13.5px;
+    font-style: italic;
+  }
+  .taskTabs { display: flex; gap: 6px; margin-bottom: 14px; }
+  .taskTabs button.sub-active { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  .config-banner {
+    max-width: 900px;
+    margin: 16px auto 0;
+    padding: 14px 18px;
+    background: #fbf0da;
+    border: 1px solid var(--warn);
+    border-radius: var(--radius);
+    font-size: 13.5px;
+    color: #6b4b1a;
+  }
+  .config-banner code { background: #f2e0b8; padding: 1px 5px; border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Field Ledger <span class="stamp" id="folderStamp">not connected</span></h1>
+  <div class="auth-area">
+    <span id="userLabel" style="font-family:'IBM Plex Mono',monospace;font-size:12px;"></span>
+    <button id="signInBtn">Sign in with Google</button>
+    <button id="signOutBtn" style="display:none;">Close ledger</button>
+  </div>
+</header>
+
+<div id="statusBar">
+  <span class="dot dot-idle" id="statusDot"></span>
+  <span id="statusText">Not signed in.</span>
+  <button id="retryBtn" style="display:none;">Retry</button>
+</div>
+
+<div id="configBanner" class="config-banner" style="display:none;">
+  <strong>Setup needed:</strong> this copy of Field Ledger has no Google OAuth Client ID configured yet.
+  Open this file, find the <code>CONFIG</code> block near the top of the script, and fill in
+  <code>CLIENT_ID</code> and <code>API_KEY</code> from your Google Cloud project (see SETUP.md).
+  The app won't be able to sign in until that's done.
+</div>
+
+<nav class="tabs" id="tabNav">
+  <button data-tab="timelog" class="active">Time Log</button>
+  <button data-tab="tasks">Tasks</button>
+  <button data-tab="import">Import</button>
+  <button data-tab="settings">Settings</button>
+</nav>
+
+<main>
+
+  <!-- TIME LOG -->
+  <section class="panel active" id="panel-timelog">
+    <div id="dateNav">
+      <button class="ghost" id="prevDay">&larr; Prev</button>
+      <span id="currentDateLabel">—</span>
+      <button class="ghost" id="nextDay">Next &rarr;</button>
+      <button class="ghost" id="todayBtn">Today</button>
+    </div>
+
+    <div id="overlapWarning" class="banner warn" style="display:none;"></div>
+    <div id="futureBlockWarning" class="banner fail" style="display:none;">
+      Cannot log entries for a future date.
+    </div>
+
+    <div class="row">
+      <div>
+        <label>Start</label>
+        <input type="time" id="entryStart">
+      </div>
+      <div>
+        <label>End</label>
+        <input type="time" id="entryEnd">
+      </div>
+      <div>
+        <label>Category</label>
+        <select id="entryCategory"></select>
+      </div>
+      <div style="flex:1; min-width:180px;">
+        <label>Description</label>
+        <input type="text" id="entryDescription" style="width:100%;">
+      </div>
+      <div>
+        <label>Rating (&minus;5 to +5)</label>
+        <input type="number" id="entryRating" min="-5" max="5" step="1" style="width:70px;">
+      </div>
+      <div>
+        <button class="action" id="addEntryBtn">Add entry</button>
+      </div>
+    </div>
+
+    <table id="timeLogTable">
+      <thead>
+        <tr><th>Start</th><th>End</th><th>Category</th><th>Description</th><th>Rating</th><th></th></tr>
+      </thead>
+      <tbody id="timeLogBody"></tbody>
+    </table>
+    <div class="empty-state" id="timeLogEmpty" style="display:none;">No entries logged for this date.</div>
+  </section>
+
+  <!-- TASKS -->
+  <section class="panel" id="panel-tasks">
+    <div class="taskTabs">
+      <button class="ghost sub-active" data-tasktab="active">Active</button>
+      <button class="ghost" data-tasktab="completed">Completed</button>
+    </div>
+
+    <div class="row">
+      <div style="flex:1; min-width:180px;">
+        <label>Title</label>
+        <input type="text" id="taskTitle" style="width:100%;">
+      </div>
+      <div>
+        <label>Timing</label>
+        <select id="taskDueType">
+          <option value="asap">ASAP</option>
+          <option value="date">Specific date</option>
+        </select>
+      </div>
+      <div id="taskDueDateWrap" style="display:none;">
+        <label>Due date</label>
+        <input type="date" id="taskDueDate">
+      </div>
+      <div>
+        <label>Urgency</label>
+        <select id="taskUrgency">
+          <option value="low">Low</option>
+          <option value="medium" selected>Medium</option>
+          <option value="high">High</option>
+        </select>
+      </div>
+      <div>
+        <label>Importance</label>
+        <select id="taskImportance">
+          <option value="low">Low</option>
+          <option value="medium" selected>Medium</option>
+          <option value="high">High</option>
+        </select>
+      </div>
+      <div>
+        <button class="action" id="addTaskBtn">Add task</button>
+      </div>
+    </div>
+
+    <table id="taskTable">
+      <thead>
+        <tr><th></th><th>Title</th><th>Timing</th><th>Urgency</th><th>Importance</th><th></th></tr>
+      </thead>
+      <tbody id="taskBody"></tbody>
+    </table>
+    <div class="empty-state" id="taskEmpty" style="display:none;">Nothing here yet.</div>
+  </section>
+
+  <!-- IMPORT -->
+  <section class="panel" id="panel-import">
+    <div class="banner info">
+      Paste JSON from a phone check-in below, then Preview before applying. Field Ledger will never delete
+      a record from a check-in — only add or modify.
+    </div>
+    <label>Paste check-in JSON</label>
+    <textarea id="importText" placeholder="[ { &quot;recordType&quot;: ... } ]"></textarea>
+    <div class="row" style="margin-top:12px;">
+      <button class="action" id="previewImportBtn">Preview</button>
+      <button class="action" id="applyImportBtn" disabled>Apply</button>
+    </div>
+    <div id="importPreview"></div>
+  </section>
+
+  <!-- SETTINGS -->
+  <section class="panel" id="panel-settings">
+    <h3 style="font-family:'Zilla Slab',serif; margin-top:0;">Categories</h3>
+    <div class="row">
+      <div>
+        <label>New category</label>
+        <input type="text" id="newCategoryName">
+      </div>
+      <div><button class="action" id="addCategoryBtn">Add</button></div>
+    </div>
+    <table>
+      <thead><tr><th>Name</th><th>In use</th><th></th></tr></thead>
+      <tbody id="categoryBody"></tbody>
+    </table>
+  </section>
+
+</main>
+
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="https://apis.google.com/js/api.js"></script>
+
+<script>
+/* =========================================================================
+   CONFIG — fill these in after completing SETUP.md steps 2–4.
+   These values are not secret (build plan §9) — it is safe for them to be
+   visible in this public source file. The real security boundary is the
+   Authorized JavaScript origins list on the OAuth client, plus Google's own
+   consent screen.
+   ========================================================================= */
+const CONFIG = {
+  CLIENT_ID: '922358707738-gai84du21o0ajv75uqq47t8sqk1sdu4j.apps.googleusercontent.com',
+  API_KEY: 'AIzaSyB5UjzXlVUQaejnxmtTpqF3-b_UbMJxqYw',   // restricted to Picker API + toddamackay.github.io
+  SCOPES: 'https://www.googleapis.com/auth/drive.file',
+  FOLDER_NAME: 'Field Ledger',
+  MASTER_FILENAME: 'field-ledger.json',
+  SCHEMA_VERSION: 1
+};
+
+/* =========================================================================
+   STATE — in-memory only. Nothing here is written to localStorage or any
+   browser storage layer, on purpose (build plan §2) — the Drive file is the
+   only source of truth. Closing the tab loses nothing, because nothing
+   here is authoritative until Drive confirms it.
+   ========================================================================= */
+const state = {
+  tokenClient: null,
+  accessToken: null,
+  signedIn: false,
+  folderId: null,
+  masterFileId: null,
+  lastLoadedModifiedTime: null,
+  lastSavedDateStamp: null,   // yyyy-mm-dd of the last successful save, for snapshot logic
+  data: null,                 // working ledger object
+  lastKnownGoodData: null,    // deep copy of last Drive-confirmed state, for record-count sanity check
+  saving: false,
+  lastFailedSaveFn: null,     // for Retry
+  selectedDate: todayStr(),
+  taskView: 'active',
+  pickerInited: false,
+  gapiInited: false
+};
+
+function todayStr() {
+  const d = new Date();
+  return d.toISOString().slice(0, 10);
+}
+
+function emptyLedger() {
+  return {
+    schemaVersion: CONFIG.SCHEMA_VERSION,
+    categories: ['General'],
+    timeLog: [],
+    tasks: []
+  };
+}
+
+/* =========================================================================
+   STATUS BAR
+   ========================================================================= */
+function setStatus(kind, text, retryFn) {
+  const dot = document.getElementById('statusDot');
+  const label = document.getElementById('statusText');
+  const retryBtn = document.getElementById('retryBtn');
+  dot.className = 'dot dot-' + kind;
+  label.textContent = text;
+  if (retryFn) {
+    retryBtn.style.display = 'inline-block';
+    state.lastFailedSaveFn = retryFn;
+  } else {
+    retryBtn.style.display = 'none';
+    state.lastFailedSaveFn = null;
+  }
+}
+document.getElementById('retryBtn').addEventListener('click', () => {
+  if (state.lastFailedSaveFn) state.lastFailedSaveFn();
+});
+
+/* =========================================================================
+   SCHEMA VALIDATION
+   ========================================================================= */
+function validateSchema(data) {
+  const errors = [];
+  if (!data || typeof data !== 'object') return { valid: false, errors: ['Root is not an object.'] };
+  if (!Array.isArray(data.categories)) errors.push('categories must be an array.');
+  if (!Array.isArray(data.timeLog)) errors.push('timeLog must be an array.');
+  if (!Array.isArray(data.tasks)) errors.push('tasks must be an array.');
+  if (errors.length) return { valid: false, errors };
+
+  data.timeLog.forEach((e, i) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(e.date || '')) errors.push(`timeLog[${i}]: bad date`);
+    if (!/^\d{2}:\d{2}$/.test(e.startTime || '')) errors.push(`timeLog[${i}]: bad startTime`);
+    if (!/^\d{2}:\d{2}$/.test(e.endTime || '')) errors.push(`timeLog[${i}]: bad endTime`);
+    if (typeof e.category !== 'string' || !e.category) errors.push(`timeLog[${i}]: missing category`);
+    if (typeof e.rating !== 'number') errors.push(`timeLog[${i}]: rating must be a number, got ${JSON.stringify(e.rating)}`);
+    else if (e.rating < -5 || e.rating > 5) errors.push(`timeLog[${i}]: rating ${e.rating} is out of range (-5 to +5)`);
+  });
+
+  data.tasks.forEach((t, i) => {
+    if (typeof t.title !== 'string' || !t.title) errors.push(`tasks[${i}]: missing title`);
+    if (!['asap', 'date'].includes(t.dueType)) errors.push(`tasks[${i}]: bad dueType`);
+    if (t.dueType === 'date' && !/^\d{4}-\d{2}-\d{2}$/.test(t.dueDate || '')) errors.push(`tasks[${i}]: bad dueDate`);
+    if (!['low', 'medium', 'high'].includes(t.urgency)) errors.push(`tasks[${i}]: bad urgency`);
+    if (!['low', 'medium', 'high'].includes(t.importance)) errors.push(`tasks[${i}]: bad importance`);
+    if (!['active', 'completed', 'dropped'].includes(t.status)) errors.push(`tasks[${i}]: bad status`);
+  });
+
+  return { valid: errors.length === 0, errors };
+}
+
+function sanityCheckRecordCount(oldData, newData) {
+  if (!oldData) return { ok: true };
+  const oldTotal = oldData.timeLog.length + oldData.tasks.length;
+  const newTotal = newData.timeLog.length + newData.tasks.length;
+  if (oldTotal > 0 && newTotal < oldTotal * 0.5) {
+    return { ok: false, oldTotal, newTotal };
+  }
+  return { ok: true };
+}
+
+/* =========================================================================
+   GOOGLE AUTH (Google Identity Services — token client)
+   ========================================================================= */
+window.onload = () => {
+  if (!CONFIG.CLIENT_ID || !CONFIG.API_KEY) {
+    document.getElementById('configBanner').style.display = 'block';
+  }
+  initGis();
+  gapi.load('picker', () => { state.pickerInited = true; });
+};
+
+function initGis() {
+  if (!window.google || !CONFIG.CLIENT_ID) return;
+  state.tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: CONFIG.CLIENT_ID,
+    scope: CONFIG.SCOPES,
+    callback: handleTokenResponse
+  });
+}
+
+document.getElementById('signInBtn').addEventListener('click', () => {
+  if (!CONFIG.CLIENT_ID) {
+    alert('Add your Google Cloud Client ID to CONFIG before signing in. See SETUP.md.');
+    return;
+  }
+  if (!state.tokenClient) initGis();
+  state.tokenClient.requestAccessToken({ prompt: state.accessToken ? '' : 'consent' });
+});
+
+document.getElementById('signOutBtn').addEventListener('click', () => {
+  if (state.accessToken) {
+    google.accounts.oauth2.revoke(state.accessToken, () => {});
+  }
+  // Reset in-memory state entirely — "close it at end of day" (build plan §3C).
+  Object.assign(state, {
+    accessToken: null, signedIn: false, folderId: null, masterFileId: null,
+    lastLoadedModifiedTime: null, data: null, lastKnownGoodData: null
+  });
+  document.getElementById('signInBtn').style.display = 'inline-block';
+  document.getElementById('signOutBtn').style.display = 'none';
+  document.getElementById('userLabel').textContent = '';
+  document.getElementById('folderStamp').textContent = 'not connected';
+  setStatus('idle', 'Not signed in.');
+  renderAll();
+});
+
+async function handleTokenResponse(resp) {
+  if (resp.error) {
+    setStatus('failed', 'Sign-in failed: ' + resp.error);
+    return;
+  }
+  state.accessToken = resp.access_token;
+  state.signedIn = true;
+  document.getElementById('signInBtn').style.display = 'none';
+  document.getElementById('signOutBtn').style.display = 'inline-block';
+  setStatus('saving', 'Connecting to Drive…');
+  try {
+    await connectFolderAndMaster();
+  } catch (err) {
+    setStatus('failed', 'Could not connect to Drive: ' + err.message);
+  }
+}
+
+/* Re-authorization: called whenever a Drive call gets a 401. Per build plan §5,
+   the app must never keep appearing to save once auth has lapsed. */
+async function reauthorize() {
+  return new Promise((resolve, reject) => {
+    state.tokenClient.callback = (resp) => {
+      if (resp.error) { reject(new Error('Re-authorization failed')); return; }
+      state.accessToken = resp.access_token;
+      resolve();
+    };
+    state.tokenClient.requestAccessToken({ prompt: '' }); // try silent first
+  });
+}
+
+/* =========================================================================
+   DRIVE HELPERS
+   ========================================================================= */
+const DRIVE_BASE = 'https://www.googleapis.com/drive/v3/files';
+const DRIVE_UPLOAD_BASE = 'https://www.googleapis.com/upload/drive/v3/files';
+
+async function driveFetch(url, options = {}, retried = false) {
+  options.headers = Object.assign({}, options.headers, {
+    Authorization: 'Bearer ' + state.accessToken
+  });
+  const resp = await fetch(url, options);
+  if (resp.status === 401 && !retried) {
+    await reauthorize();
+    return driveFetch(url, options, true);
+  }
+  return resp;
+}
+
+async function connectFolderAndMaster() {
+  // Under drive.file scope, this app can only see files/folders it created
+  // or that the user has explicitly opened with it (e.g. via Picker).
+  // [VERIFY against real Drive behaviour, per build plan §11/§12.]
+  const q = encodeURIComponent(`mimeType='application/vnd.google-apps.folder' and name='${CONFIG.FOLDER_NAME}' and trashed=false`);
+  const resp = await driveFetch(`${DRIVE_BASE}?q=${q}&fields=files(id,name)`);
+  const json = await resp.json();
+
+  if (json.files && json.files.length === 1) {
+    state.folderId = json.files[0].id;
+    await afterFolderReady();
+  } else if (json.files && json.files.length > 1) {
+    setStatus('failed', `Found ${json.files.length} folders named "${CONFIG.FOLDER_NAME}" — resolve manually in Drive.`);
+  } else {
+    // Nothing visible yet — offer to pick the existing folder, or create a new one.
+    offerFolderChoice();
+  }
+}
+
+function offerFolderChoice() {
+  setStatus('idle', `No "${CONFIG.FOLDER_NAME}" folder visible yet. Choose it in Drive, or create a new one.`);
+  const choice = confirm(
+    `Field Ledger can't see a "${CONFIG.FOLDER_NAME}" folder yet (this is normal the first time).\n\n` +
+    `Click OK to pick your existing "${CONFIG.FOLDER_NAME}" folder in Drive.\n` +
+    `Click Cancel to have Field Ledger create a brand-new folder instead.`
+  );
+  if (choice) {
+    openFolderPicker();
+  } else {
+    createFolder();
+  }
+}
+
+function openFolderPicker() {
+  if (!state.pickerInited) {
+    alert('Picker is still loading — try again in a moment.');
+    return;
+  }
+  const view = new google.picker.DocsView(google.picker.ViewId.FOLDERS)
+    .setSelectFolderEnabled(true)
+    .setIncludeFolders(true);
+  const picker = new google.picker.PickerBuilder()
+    .addView(view)
+    .setOAuthToken(state.accessToken)
+    .setDeveloperKey(CONFIG.API_KEY)
+    .setCallback(async (data) => {
+      if (data.action === google.picker.Action.PICKED) {
+        state.folderId = data.docs[0].id;
+        await afterFolderReady();
+      }
+    })
+    .build();
+  picker.setVisible(true);
+}
+
+async function createFolder() {
+  const resp = await driveFetch(DRIVE_BASE, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: CONFIG.FOLDER_NAME, mimeType: 'application/vnd.google-apps.folder' })
+  });
+  const json = await resp.json();
+  state.folderId = json.id;
+  await afterFolderReady();
+}
+
+async function afterFolderReady() {
+  document.getElementById('folderStamp').textContent = CONFIG.FOLDER_NAME;
+  await ensureMasterFile();
+}
+
+async function ensureMasterFile() {
+  const q = encodeURIComponent(`'${state.folderId}' in parents and name='${CONFIG.MASTER_FILENAME}' and trashed=false`);
+  const resp = await driveFetch(`${DRIVE_BASE}?q=${q}&fields=files(id,name,modifiedTime)`);
+  const json = await resp.json();
+
+  if (json.files && json.files.length === 1) {
+    state.masterFileId = json.files[0].id;
+    state.lastLoadedModifiedTime = json.files[0].modifiedTime;
+    await loadMaster();
+  } else if (json.files && json.files.length > 1) {
+    setStatus('failed', `Found ${json.files.length} files named "${CONFIG.MASTER_FILENAME}" — resolve manually in Drive.`);
+  } else {
+    await createMasterFile();
+  }
+}
+
+async function createMasterFile() {
+  const initial = emptyLedger();
+  const created = await uploadMasterContent(null, initial);
+  state.masterFileId = created.id;
+  state.lastLoadedModifiedTime = created.modifiedTime;
+  state.data = initial;
+  state.lastKnownGoodData = JSON.parse(JSON.stringify(initial));
+  state.lastSavedDateStamp = todayStr();
+  setStatus('saved', `Created a new ${CONFIG.MASTER_FILENAME} in Drive. No entries yet.`);
+  renderAll();
+}
+
+async function loadMaster() {
+  const resp = await driveFetch(`${DRIVE_BASE}/${state.masterFileId}?alt=media`);
+  const text = await resp.text();
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch (e) {
+    setStatus('failed', 'Master file is not valid JSON — stop and check it manually in Drive before continuing.');
+    return;
+  }
+  const validation = validateSchema(parsed);
+  if (!validation.valid) {
+    setStatus('failed', 'Master file failed schema validation: ' + validation.errors.slice(0, 3).join('; '));
+    return;
+  }
+  state.data = parsed;
+  state.lastKnownGoodData = JSON.parse(JSON.stringify(parsed));
+  setStatus('saved', 'Loaded.');
+  renderAll();
+}
+
+/* Multipart upload used both for initial file creation and for every save. */
+async function uploadMasterContent(fileId, dataObj) {
+  const boundary = '-------fieldledgerboundary';
+  const metadata = fileId ? {} : { name: CONFIG.MASTER_FILENAME, parents: [state.folderId] };
+  const body =
+    `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n` +
+    JSON.stringify(metadata) +
+    `\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n` +
+    JSON.stringify(dataObj) +
+    `\r\n--${boundary}--`;
+
+  const url = fileId
+    ? `${DRIVE_UPLOAD_BASE}/${fileId}?uploadType=multipart&fields=id,modifiedTime`
+    : `${DRIVE_UPLOAD_BASE}?uploadType=multipart&fields=id,modifiedTime`;
+
+  const resp = await driveFetch(url, {
+    method: fileId ? 'PATCH' : 'POST',
+    headers: { 'Content-Type': `multipart/related; boundary=${boundary}` },
+    body
+  });
+  if (!resp.ok) throw new Error('Drive upload failed (' + resp.status + ')');
+  return resp.json();
+}
+
+async function createSnapshot() {
+  // Snapshot holds the last KNOWN-GOOD content, i.e. what's currently on Drive
+  // before today's change is applied — per build plan §4.
+  const snapshotName = `field-ledger-snapshot-${state.lastSavedDateStamp || todayStr()}.json`;
+  const boundary = '-------fieldledgersnapshot';
+  const metadata = { name: snapshotName, parents: [state.folderId] };
+  const body =
+    `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n` +
+    JSON.stringify(metadata) +
+    `\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n` +
+    JSON.stringify(state.lastKnownGoodData) +
+    `\r\n--${boundary}--`;
+  const resp = await driveFetch(`${DRIVE_UPLOAD_BASE}?uploadType=multipart&fields=id`, {
+    method: 'POST',
+    headers: { 'Content-Type': `multipart/related; boundary=${boundary}` },
+    body
+  });
+  if (!resp.ok) throw new Error('Snapshot write failed (' + resp.status + ')');
+  return resp.json();
+}
+
+/* =========================================================================
+   SAVE — the core safety-critical path. Every rule from build plan §6.
+   ========================================================================= */
+let saveDebounceHandle = null;
+function scheduleSave() {
+  clearTimeout(saveDebounceHandle);
+  saveDebounceHandle = setTimeout(saveMaster, 600);
+}
+
+async function saveMaster() {
+  if (!state.signedIn || !state.masterFileId) return;
+  setStatus('saving', 'Saving…');
+
+  const validation = validateSchema(state.data);
+  if (!validation.valid) {
+    setStatus('failed', 'Not saved — schema invalid: ' + validation.errors[0], saveMaster);
+    return;
+  }
+
+  const sanity = sanityCheckRecordCount(state.lastKnownGoodData, state.data);
+  if (!sanity.ok) {
+    setStatus('failed',
+      `Not saved — record count dropped from ${sanity.oldTotal} to ${sanity.newTotal}. ` +
+      `This looks like the August 13 failure. Reload and check before retrying.`, null);
+    return;
+  }
+
+  // Stale-version check
+  try {
+    const check = await driveFetch(`${DRIVE_BASE}/${state.masterFileId}?fields=modifiedTime`);
+    const checkJson = await check.json();
+    if (checkJson.modifiedTime !== state.lastLoadedModifiedTime) {
+      setStatus('failed', 'Field Ledger has changed elsewhere. Reload before saving.', null);
+      return;
+    }
+  } catch (e) {
+    setStatus('failed', 'Could not verify current Drive version — not saved.', saveMaster);
+    return;
+  }
+
+  // Mandatory daily snapshot before first save of a new day
+  const today = todayStr();
+  if (state.lastSavedDateStamp !== today) {
+    try {
+      await createSnapshot();
+    } catch (e) {
+      setStatus('failed', 'Snapshot failed — master NOT saved, by design. ' + e.message, saveMaster);
+      return;
+    }
+    state.lastSavedDateStamp = today;
+  }
+
+  try {
+    const result = await uploadMasterContent(state.masterFileId, state.data);
+    state.lastLoadedModifiedTime = result.modifiedTime;
+    state.lastKnownGoodData = JSON.parse(JSON.stringify(state.data));
+    setStatus('saved', 'Saved.');
+  } catch (e) {
+    setStatus('failed', 'Save failed: ' + e.message, saveMaster);
+  }
+}
+
+/* =========================================================================
+   TIME LOG UI
+   ========================================================================= */
+function overlaps(aStart, aEnd, bStart, bEnd) {
+  return aStart < bEnd && bStart < aEnd;
+}
+
+document.getElementById('prevDay').addEventListener('click', () => shiftDate(-1));
+document.getElementById('nextDay').addEventListener('click', () => shiftDate(1));
+document.getElementById('todayBtn').addEventListener('click', () => { state.selectedDate = todayStr(); renderTimeLog(); });
+
+function shiftDate(delta) {
+  const d = new Date(state.selectedDate + 'T00:00:00');
+  d.setDate(d.getDate() + delta);
+  state.selectedDate = d.toISOString().slice(0, 10);
+  renderTimeLog();
+}
+
+document.getElementById('addEntryBtn').addEventListener('click', () => {
+  if (!state.data) return;
+  const start = document.getElementById('entryStart').value;
+  const end = document.getElementById('entryEnd').value;
+  const category = document.getElementById('entryCategory').value;
+  const description = document.getElementById('entryDescription').value.trim();
+  const ratingRaw = document.getElementById('entryRating').value;
+
+  if (state.selectedDate > todayStr()) {
+    document.getElementById('futureBlockWarning').style.display = 'block';
+    return;
+  }
+  if (!start || !end || ratingRaw === '') {
+    alert('Start, end, and a rating from -5 to +5 are all required.');
+    return;
+  }
+  const rating = parseInt(ratingRaw, 10);
+  if (rating < -5 || rating > 5) {
+    alert('Rating must be between -5 and +5.');
+    return;
+  }
+
+  const existing = state.data.timeLog.filter(e => e.date === state.selectedDate);
+  const clash = existing.some(e => overlaps(start, end, e.startTime, e.endTime));
+  const warnEl = document.getElementById('overlapWarning');
+  if (clash) {
+    warnEl.textContent = 'Heads up — this overlaps with another entry on this date. Added anyway; review both.';
+    warnEl.style.display = 'block';
+  } else {
+    warnEl.style.display = 'none';
+  }
+
+  state.data.timeLog.push({
+    updateId: 'app-' + Date.now(),
+    date: state.selectedDate,
+    startTime: start,
+    endTime: end,
+    category,
+    description,
+    rating
+  });
+
+  document.getElementById('entryStart').value = '';
+  document.getElementById('entryEnd').value = '';
+  document.getElementById('entryDescription').value = '';
+  document.getElementById('entryRating').value = '';
+
+  renderTimeLog();
+  scheduleSave();
+});
+
+function renderTimeLog() {
+  document.getElementById('futureBlockWarning').style.display =
+    state.selectedDate > todayStr() ? 'block' : 'none';
+  document.getElementById('currentDateLabel').textContent = state.selectedDate;
+
+  const catSelect = document.getElementById('entryCategory');
+  catSelect.innerHTML = '';
+  (state.data ? state.data.categories : []).forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c; opt.textContent = c;
+    catSelect.appendChild(opt);
+  });
+
+  const body = document.getElementById('timeLogBody');
+  body.innerHTML = '';
+  const entries = (state.data ? state.data.timeLog : [])
+    .filter(e => e.date === state.selectedDate)
+    .sort((a, b) => a.startTime.localeCompare(b.startTime));
+
+  document.getElementById('timeLogEmpty').style.display = entries.length ? 'none' : 'block';
+
+  entries.forEach(e => {
+    const tr = document.createElement('tr');
+    const ratingClass = e.rating > 0 ? 'rating-pos' : e.rating < 0 ? 'rating-neg' : 'rating-zero';
+    tr.innerHTML = `
+      <td>${e.startTime}</td><td>${e.endTime}</td><td>${escapeHtml(e.category)}</td>
+      <td>${escapeHtml(e.description || '')}</td>
+      <td class="${ratingClass}">${e.rating > 0 ? '+' : ''}${e.rating}</td>
+      <td></td>`;
+    body.appendChild(tr);
+  });
+}
+
+/* =========================================================================
+   TASKS UI
+   ========================================================================= */
+document.getElementById('taskDueType').addEventListener('change', (e) => {
+  document.getElementById('taskDueDateWrap').style.display = e.target.value === 'date' ? 'block' : 'none';
+});
+
+document.querySelectorAll('[data-tasktab]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    state.taskView = btn.dataset.tasktab;
+    document.querySelectorAll('[data-tasktab]').forEach(b => b.classList.remove('sub-active'));
+    btn.classList.add('sub-active');
+    renderTasks();
+  });
+});
+
+document.getElementById('addTaskBtn').addEventListener('click', () => {
+  if (!state.data) return;
+  const title = document.getElementById('taskTitle').value.trim();
+  const dueType = document.getElementById('taskDueType').value;
+  const dueDate = document.getElementById('taskDueDate').value;
+  const urgency = document.getElementById('taskUrgency').value;
+  const importance = document.getElementById('taskImportance').value;
+
+  if (!title) { alert('Title is required.'); return; }
+  if (dueType === 'date' && !dueDate) { alert('Pick a due date, or switch to ASAP.'); return; }
+
+  state.data.tasks.push({
+    updateId: 'app-' + Date.now(),
+    title,
+    dueType,
+    dueDate: dueType === 'date' ? dueDate : null,
+    urgency,
+    importance,
+    status: 'active',
+    order: state.data.tasks.length
+  });
+
+  document.getElementById('taskTitle').value = '';
+  renderTasks();
+  scheduleSave();
+});
+
+function renderTasks() {
+  const body = document.getElementById('taskBody');
+  body.innerHTML = '';
+  const all = state.data ? state.data.tasks : [];
+  const visible = all
+    .map((t, i) => ({ t, i }))
+    .filter(({ t }) => state.taskView === 'active' ? t.status === 'active' : t.status === 'completed')
+    .sort((a, b) => (a.t.order || 0) - (b.t.order || 0));
+
+  document.getElementById('taskEmpty').style.display = visible.length ? 'none' : 'block';
+
+  visible.forEach(({ t, i }, pos) => {
+    const tr = document.createElement('tr');
+    const timing = t.dueType === 'asap' ? 'ASAP' : t.dueDate;
+    tr.innerHTML = `
+      <td class="order-btns">
+        <button class="ghost" data-up="${i}">&uarr;</button>
+        <button class="ghost" data-down="${i}">&darr;</button>
+      </td>
+      <td>${escapeHtml(t.title)}</td>
+      <td>${timing}</td>
+      <td><span class="chip chip-${t.urgency}">${t.urgency}</span></td>
+      <td><span class="chip chip-${t.importance}">${t.importance}</span></td>
+      <td>
+        ${state.taskView === 'active'
+          ? `<button class="ghost" data-complete="${i}">Complete</button> <button class="ghost" data-drop="${i}">Drop</button>`
+          : `<button class="ghost" data-reopen="${i}">Reopen</button>`}
+      </td>`;
+    body.appendChild(tr);
+  });
+
+  body.querySelectorAll('[data-up]').forEach(b => b.addEventListener('click', () => moveTask(+b.dataset.up, -1)));
+  body.querySelectorAll('[data-down]').forEach(b => b.addEventListener('click', () => moveTask(+b.dataset.down, 1)));
+  body.querySelectorAll('[data-complete]').forEach(b => b.addEventListener('click', () => setTaskStatus(+b.dataset.complete, 'completed')));
+  body.querySelectorAll('[data-drop]').forEach(b => b.addEventListener('click', () => setTaskStatus(+b.dataset.drop, 'dropped')));
+  body.querySelectorAll('[data-reopen]').forEach(b => b.addEventListener('click', () => setTaskStatus(+b.dataset.reopen, 'active')));
+}
+
+function moveTask(index, direction) {
+  const list = state.data.tasks;
+  const target = index + direction;
+  if (target < 0 || target >= list.length) return;
+  const a = list[index].order || 0;
+  const b = list[target].order || 0;
+  list[index].order = b;
+  list[target].order = a;
+  renderTasks();
+  scheduleSave();
+}
+
+function setTaskStatus(index, status) {
+  state.data.tasks[index].status = status;
+  renderTasks();
+  scheduleSave();
+}
+
+/* =========================================================================
+   IMPORT UI — Paste → Preview → Apply. Add/modify only, never delete.
+   ========================================================================= */
+let pendingImport = null;
+
+document.getElementById('previewImportBtn').addEventListener('click', () => {
+  const raw = document.getElementById('importText').value.trim();
+  const previewEl = document.getElementById('importPreview');
+  previewEl.innerHTML = '';
+  document.getElementById('applyImportBtn').disabled = true;
+  pendingImport = null;
+
+  let records;
+  try {
+    records = JSON.parse(raw);
+    if (!Array.isArray(records)) throw new Error('Top level must be a JSON array.');
+  } catch (e) {
+    previewEl.innerHTML = `<div class="banner fail">Could not parse JSON: ${escapeHtml(e.message)}</div>`;
+    return;
+  }
+
+  const existingIds = new Set([
+    ...state.data.timeLog.map(r => r.updateId),
+    ...state.data.tasks.map(r => r.updateId)
+  ]);
+  const seenInBatch = new Set();
+  const summary = [];
+  let hasBlockingError = false;
+
+  records.forEach((r, i) => {
+    if (r.action === 'delete') {
+      summary.push(`<li class="banner fail" style="display:block;">Record ${i}: "delete" is not permitted from a check-in. Skipped — fix at the source.</li>`);
+      hasBlockingError = true;
+      return;
+    }
+    if (!r.updateId) {
+      summary.push(`<li class="banner fail" style="display:block;">Record ${i}: missing required updateId.</li>`);
+      hasBlockingError = true;
+      return;
+    }
+    const dupe = existingIds.has(r.updateId) || seenInBatch.has(r.updateId);
+    seenInBatch.add(r.updateId);
+    const label = r.recordType === 'task' ? (r.title || '(task)') : (r.description || r.category || '(time entry)');
+    summary.push(`<li>${r.action === 'add' ? 'Add' : 'Modify'} ${escapeHtml(r.recordType || '?')} — ${escapeHtml(label)} ${dupe ? '<em>(duplicate updateId — will be skipped)</em>' : ''}</li>`);
+  });
+
+  document.getElementById('importPreview').innerHTML = `<ul>${summary.join('')}</ul>`;
+  if (!hasBlockingError) {
+    pendingImport = records;
+    document.getElementById('applyImportBtn').disabled = false;
+  }
+});
+
+document.getElementById('applyImportBtn').addEventListener('click', () => {
+  if (!pendingImport) return;
+  const existingIds = new Set([
+    ...state.data.timeLog.map(r => r.updateId),
+    ...state.data.tasks.map(r => r.updateId)
+  ]);
+
+  pendingImport.forEach(r => {
+    if (existingIds.has(r.updateId)) return; // duplicate protection
+    if (r.action === 'add') {
+      if (r.recordType === 'task') {
+        state.data.tasks.push(Object.assign({ status: 'active', order: state.data.tasks.length }, stripMeta(r)));
+      } else {
+        state.data.timeLog.push(stripMeta(r));
+      }
+    } else if (r.action === 'modify') {
+      const list = r.recordType === 'task' ? state.data.tasks : state.data.timeLog;
+      const idx = list.findIndex(x => x.updateId === r.updateId);
+      if (idx >= 0) Object.assign(list[idx], stripMeta(r));
+    }
+  });
+
+  document.getElementById('importText').value = '';
+  document.getElementById('importPreview').innerHTML = '<div class="banner info">Applied.</div>';
+  document.getElementById('applyImportBtn').disabled = true;
+  pendingImport = null;
+  renderAll();
+  scheduleSave();
+});
+
+function stripMeta(r) {
+  const copy = Object.assign({}, r);
+  delete copy.action;
+  delete copy.recordType;
+  return copy;
+}
+
+/* =========================================================================
+   SETTINGS UI
+   ========================================================================= */
+document.getElementById('addCategoryBtn').addEventListener('click', () => {
+  const input = document.getElementById('newCategoryName');
+  const name = input.value.trim();
+  if (!name) return;
+  if (state.data.categories.includes(name)) { alert('That category already exists.'); return; }
+  state.data.categories.push(name);
+  input.value = '';
+  renderSettings();
+  renderTimeLog();
+  scheduleSave();
+});
+
+function renderSettings() {
+  const body = document.getElementById('categoryBody');
+  body.innerHTML = '';
+  (state.data ? state.data.categories : []).forEach(cat => {
+    const inUse = state.data.timeLog.filter(e => e.category === cat).length;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><input type="text" value="${escapeHtml(cat)}" data-rename="${escapeHtml(cat)}" style="width:160px;"></td>
+      <td>${inUse}</td>
+      <td><button class="ghost" data-delete-cat="${escapeHtml(cat)}" ${inUse ? 'disabled title="In use — cannot delete"' : ''}>Delete</button></td>`;
+    body.appendChild(tr);
+  });
+
+  body.querySelectorAll('[data-rename]').forEach(input => {
+    input.addEventListener('change', () => renameCategory(input.dataset.rename, input.value.trim()));
+  });
+  body.querySelectorAll('[data-delete-cat]').forEach(btn => {
+    btn.addEventListener('click', () => deleteCategory(btn.dataset.deleteCat));
+  });
+}
+
+function renameCategory(oldName, newName) {
+  if (!newName || newName === oldName) return;
+  const idx = state.data.categories.indexOf(oldName);
+  if (idx === -1) return;
+  state.data.categories[idx] = newName;
+  state.data.timeLog.forEach(e => { if (e.category === oldName) e.category = newName; });
+  renderSettings();
+  renderTimeLog();
+  scheduleSave();
+}
+
+function deleteCategory(name) {
+  const inUse = state.data.timeLog.some(e => e.category === name);
+  if (inUse) { alert('This category is in use and cannot be deleted.'); return; }
+  state.data.categories = state.data.categories.filter(c => c !== name);
+  renderSettings();
+  renderTimeLog();
+  scheduleSave();
+}
+
+/* =========================================================================
+   TAB NAVIGATION + RENDER
+   ========================================================================= */
+document.querySelectorAll('#tabNav button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#tabNav button').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
+  });
+});
+
+function escapeHtml(str) {
+  return String(str).replace(/[&<>"']/g, s => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[s]));
+}
+
+function renderAll() {
+  renderTimeLog();
+  renderTasks();
+  renderSettings();
+}
+renderAll();
+</script>
+</body>
+</html>
