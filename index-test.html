@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- testing auto-save -->
 <html lang="en-CA">
 <head>
 <meta charset="UTF-8">
@@ -196,6 +197,10 @@
   table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
   th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--paper-line); }
   th { font-family: 'IBM Plex Mono', monospace; font-size: 11px; text-transform: uppercase; color: var(--ink-soft); letter-spacing: 0.4px; }
+  th.sortable { cursor: pointer; user-select: none; }
+  th.sortable:hover { color: var(--brass-dark); }
+  th.sortable.sorted-by { color: var(--ink); }
+  th.sortable .arrow { font-size: 9px; margin-left: 3px; }
   .chip {
     display: inline-block;
     font-family: 'IBM Plex Mono', monospace;
@@ -326,6 +331,7 @@
     <div class="taskTabs">
       <button class="ghost sub-active" data-tasktab="active">Active</button>
       <button class="ghost" data-tasktab="completed">Completed</button>
+      <button class="ghost" id="clearTaskSortBtn" style="display:none; margin-left:auto;">&#8635; Manual order</button>
     </div>
 
     <div class="row">
@@ -371,7 +377,15 @@
 
     <table id="taskTable">
       <thead>
-        <tr><th></th><th>Title</th><th>Timing</th><th>Urgency</th><th>Importance</th><th>Comments</th><th></th></tr>
+        <tr>
+          <th></th>
+          <th>Title</th>
+          <th class="sortable" data-sort="timing">Timing</th>
+          <th class="sortable" data-sort="urgency">Urgency</th>
+          <th class="sortable" data-sort="importance">Importance</th>
+          <th>Comments</th>
+          <th></th>
+        </tr>
       </thead>
       <tbody id="taskBody"></tbody>
     </table>
@@ -457,6 +471,7 @@ const state = {
   lastFailedSaveFn: null,     // for Retry
   selectedDate: todayStr(),
   taskView: 'active',
+  taskSort: null,          // {field:'timing'|'urgency'|'importance', dir:1|-1} or null for the manual (arrow-button) order
   editingEntryId: null,   // updateId of the time log entry currently being edited inline, or null
   editingTaskId: null,    // updateId of the task currently being edited inline, or null
   pickerInited: false,
@@ -1125,15 +1140,65 @@ document.getElementById('addTaskBtn').addEventListener('click', () => {
   scheduleSave();
 });
 
+/* Column sorting for the task table. Each sortable field maps a task to a comparable
+   key, plus the direction the first click should use — for urgency and importance that's
+   high-to-low, for timing it's soonest-first, since those are what you'd want to see.
+   Clicking the same header again flips the direction. */
+const TASK_SORT = {
+  urgency:    { key: t => ({ low: 1, medium: 2, high: 3 }[t.urgency] || 0),    firstDir: -1 },
+  importance: { key: t => ({ low: 1, medium: 2, high: 3 }[t.importance] || 0), firstDir: -1 },
+  // ASAP counts as the soonest thing there is; a "specific date" with no date set
+  // sorts to the far end rather than jumbling in with the real dates.
+  timing:     { key: t => t.dueType === 'asap' ? '0000-00-00' : (t.dueDate || '9999-12-31'), firstDir: 1 }
+};
+
+function sortTasksBy(field) {
+  if (!TASK_SORT[field]) return;
+  state.taskSort = (state.taskSort && state.taskSort.field === field)
+    ? { field, dir: -state.taskSort.dir }          // same header again — reverse it
+    : { field, dir: TASK_SORT[field].firstDir };   // new header — start in its natural direction
+  renderTasks();
+}
+
+document.querySelectorAll('#taskTable th.sortable').forEach(th => {
+  th.addEventListener('click', () => sortTasksBy(th.dataset.sort));
+});
+
+document.getElementById('clearTaskSortBtn').addEventListener('click', () => {
+  state.taskSort = null;
+  renderTasks();
+});
+
+function renderTaskSortHeaders() {
+  document.querySelectorAll('#taskTable th.sortable').forEach(th => {
+    const active = state.taskSort && state.taskSort.field === th.dataset.sort;
+    th.classList.toggle('sorted-by', !!active);
+    const label = th.dataset.sort.charAt(0).toUpperCase() + th.dataset.sort.slice(1);
+    th.innerHTML = active
+      ? `${label}<span class="arrow">${state.taskSort.dir === 1 ? '&#9650;' : '&#9660;'}</span>`
+      : label;
+  });
+  document.getElementById('clearTaskSortBtn').style.display = state.taskSort ? 'inline-block' : 'none';
+}
+
 function renderTasks() {
   const body = document.getElementById('taskBody');
   body.innerHTML = '';
   const all = state.data ? state.data.tasks : [];
+  const sort = state.taskSort;
   const visible = all
     .map((t, i) => ({ t, i }))
     .filter(({ t }) => state.taskView === 'active' ? t.status === 'active' : t.status === 'completed')
-    .sort((a, b) => (a.t.order || 0) - (b.t.order || 0));
+    .sort((a, b) => {
+      if (!sort) return (a.t.order || 0) - (b.t.order || 0);
+      const ka = TASK_SORT[sort.field].key(a.t);
+      const kb = TASK_SORT[sort.field].key(b.t);
+      if (ka < kb) return -1 * sort.dir;
+      if (ka > kb) return 1 * sort.dir;
+      return (a.t.order || 0) - (b.t.order || 0);   // ties keep their manual order
+    });
 
+  renderTaskSortHeaders();
   document.getElementById('taskEmpty').style.display = visible.length ? 'none' : 'block';
 
   visible.forEach(({ t, i }, pos) => {
@@ -1173,8 +1238,8 @@ function renderTasks() {
       const timing = t.dueType === 'asap' ? 'ASAP' : t.dueDate;
       tr.innerHTML = `
         <td class="order-btns">
-          <button class="ghost" data-up="${i}">&uarr;</button>
-          <button class="ghost" data-down="${i}">&darr;</button>
+          ${sort ? '' : `<button class="ghost" data-up="${i}">&uarr;</button>
+          <button class="ghost" data-down="${i}">&darr;</button>`}
         </td>
         <td>${escapeHtml(t.title)}</td>
         <td>${timing}</td>
