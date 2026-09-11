@@ -237,6 +237,12 @@
   .rating-neg { color: var(--fail); font-weight: 600; }
   .rating-zero { color: var(--ink-soft); }
   .order-btns button { font-size: 11px; padding: 2px 6px; }
+  /* Rank column: type a number to place a task. Decimals are allowed, so you can
+     slot something between 3 and 4 as 3.5 without renumbering the rest. */
+  .rank-cell { white-space: nowrap; vertical-align: top; }
+  input.rank-box { width: 56px; font-size: 13px; padding: 4px 5px; text-align: right; }
+  .rank-cell .order-btns { margin-top: 3px; }
+  .rank-plain { font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--ink-soft); }
   #dateNav { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
   #dateNav span { font-family: 'IBM Plex Mono', monospace; font-size: 14px; font-weight: 500; }
   .empty-state {
@@ -352,7 +358,8 @@
     <div class="taskTabs">
       <button class="ghost sub-active" data-tasktab="active">Active</button>
       <button class="ghost" data-tasktab="completed">Completed</button>
-      <button class="ghost" id="clearTaskSortBtn" style="display:none; margin-left:auto;">&#8635; Manual order</button>
+      <button class="ghost" id="tidyRanksBtn" style="margin-left:auto;" title="Renumber the tasks you can see as 1, 2, 3...">&#9776; Tidy numbers</button>
+      <button class="ghost" id="clearTaskSortBtn" style="display:none;">&#8635; Rank order</button>
     </div>
 
     <div class="row">
@@ -399,7 +406,7 @@
     <table id="taskTable">
       <thead>
         <tr>
-          <th></th>
+          <th class="sortable" data-sort="rank">Rank</th>
           <th>Title</th>
           <th class="sortable" data-sort="timing">Timing</th>
           <th class="sortable" data-sort="urgency">Urgency</th>
@@ -1184,7 +1191,9 @@ document.getElementById('addTaskBtn').addEventListener('click', () => {
     urgency,
     importance,
     status: 'active',
-    order: state.data.tasks.length,
+    // One past the highest number in use, so a new task lands at the bottom of the
+    // rank order even after you've renumbered things by hand.
+    order: Math.max(0, ...state.data.tasks.map(t => rankOf(t) === null ? 0 : rankOf(t))) + 1,
     comments
   });
 
@@ -1203,8 +1212,40 @@ const TASK_SORT = {
   importance: { key: t => ({ low: 1, medium: 2, high: 3 }[t.importance] || 0), firstDir: -1 },
   // ASAP counts as the soonest thing there is; a "specific date" with no date set
   // sorts to the far end rather than jumbling in with the real dates.
-  timing:     { key: t => t.dueType === 'asap' ? '0000-00-00' : (t.dueDate || '9999-12-31'), firstDir: 1 }
+  timing:     { key: t => t.dueType === 'asap' ? '0000-00-00' : (t.dueDate || '9999-12-31'), firstDir: 1 },
+  // Rank is the number you type in. A task with no number sorts to the bottom.
+  rank:       { key: t => rankOf(t) === null ? Infinity : rankOf(t), firstDir: 1 }
 };
+
+/* The rank number lives in the task's existing "order" value, so nothing new is stored
+   and older saved files keep working. Anything that isn't a usable number counts as blank. */
+function rankOf(t) {
+  const n = Number(t.order);
+  return (t.order === null || t.order === undefined || t.order === '' || !isFinite(n)) ? null : n;
+}
+
+/* Ties fall back to rank, then to the order the tasks were created in, so a list never
+   shuffles about on its own between renders. */
+function compareTasks(a, b, sort) {
+  const field = sort ? sort.field : 'rank';
+  const dir = sort ? sort.dir : 1;
+  const ka = TASK_SORT[field].key(a.t);
+  const kb = TASK_SORT[field].key(b.t);
+  if (ka < kb) return -1 * dir;
+  if (ka > kb) return 1 * dir;
+  if (field !== 'rank') {
+    const ra = rankOf(a.t) === null ? Infinity : rankOf(a.t);
+    const rb = rankOf(b.t) === null ? Infinity : rankOf(b.t);
+    if (ra !== rb) return ra - rb;
+  }
+  return a.i - b.i;   // oldest first
+}
+
+/* The up/down arrows only make sense while the list is in rank order — otherwise
+   "up" would mean moving against whatever column you've sorted by. */
+function arrowsUsable() {
+  return !state.taskSort || (state.taskSort.field === 'rank' && state.taskSort.dir === 1);
+}
 
 function sortTasksBy(field) {
   if (!TASK_SORT[field]) return;
@@ -1221,6 +1262,13 @@ document.querySelectorAll('#taskTable th.sortable').forEach(th => {
 document.getElementById('clearTaskSortBtn').addEventListener('click', () => {
   state.taskSort = null;
   renderTasks();
+});
+
+document.getElementById('tidyRanksBtn').addEventListener('click', () => {
+  if (!state.data || !visibleTasks().length) return;
+  renumberVisible();
+  renderTasks();
+  scheduleSave();
 });
 
 function renderTaskSortHeaders() {
@@ -1243,14 +1291,7 @@ function renderTasks() {
   const visible = all
     .map((t, i) => ({ t, i }))
     .filter(({ t }) => state.taskView === 'active' ? t.status === 'active' : t.status === 'completed')
-    .sort((a, b) => {
-      if (!sort) return (a.t.order || 0) - (b.t.order || 0);
-      const ka = TASK_SORT[sort.field].key(a.t);
-      const kb = TASK_SORT[sort.field].key(b.t);
-      if (ka < kb) return -1 * sort.dir;
-      if (ka > kb) return 1 * sort.dir;
-      return (a.t.order || 0) - (b.t.order || 0);   // ties keep their manual order
-    });
+    .sort((a, b) => compareTasks(a, b, sort));
 
   renderTaskSortHeaders();
   document.getElementById('taskEmpty').style.display = visible.length ? 'none' : 'block';
@@ -1260,7 +1301,7 @@ function renderTasks() {
     if (state.editingTaskId === t.updateId) {
       const sel = (val, opt) => val === opt ? 'selected' : '';
       tr.innerHTML = `
-        <td class="order-btns"></td>
+        <td class="rank-cell"><span class="rank-plain">${rankOf(t) === null ? '&mdash;' : rankOf(t)}</span></td>
         <td><input type="text" value="${escapeHtml(t.title)}" data-edit-title style="width:100%;"></td>
         <td>
           <select data-edit-duetype style="width:90px;">
@@ -1291,9 +1332,13 @@ function renderTasks() {
     } else {
       const timing = t.dueType === 'asap' ? 'ASAP' : t.dueDate;
       tr.innerHTML = `
-        <td class="order-btns">
-          ${sort ? '' : `<button class="ghost" data-up="${i}">&uarr;</button>
-          <button class="ghost" data-down="${i}">&darr;</button>`}
+        <td class="rank-cell">
+          <input type="number" step="any" class="rank-box" value="${rankOf(t) === null ? '' : rankOf(t)}"
+                 data-rank="${escapeHtml(t.updateId)}" title="Type a number to rank this task. Decimals are fine — 3.5 sits between 3 and 4.">
+          ${arrowsUsable() ? `<div class="order-btns">
+            <button class="ghost" data-up="${escapeHtml(t.updateId)}" title="Move up one">&uarr;</button>
+            <button class="ghost" data-down="${escapeHtml(t.updateId)}" title="Move down one">&darr;</button>
+          </div>` : ''}
         </td>
         <td class="text-cell">${escapeHtml(t.title)}</td>
         <td>${timing}</td>
@@ -1310,8 +1355,9 @@ function renderTasks() {
     body.appendChild(tr);
   });
 
-  body.querySelectorAll('[data-up]').forEach(b => b.addEventListener('click', () => moveTask(+b.dataset.up, -1)));
-  body.querySelectorAll('[data-down]').forEach(b => b.addEventListener('click', () => moveTask(+b.dataset.down, 1)));
+  body.querySelectorAll('[data-up]').forEach(b => b.addEventListener('click', () => moveTask(b.dataset.up, -1)));
+  body.querySelectorAll('[data-down]').forEach(b => b.addEventListener('click', () => moveTask(b.dataset.down, 1)));
+  body.querySelectorAll('[data-rank]').forEach(box => box.addEventListener('change', () => setTaskRank(box.dataset.rank, box.value)));
   body.querySelectorAll('[data-complete]').forEach(b => b.addEventListener('click', () => setTaskStatus(+b.dataset.complete, 'completed')));
   body.querySelectorAll('[data-drop]').forEach(b => b.addEventListener('click', () => setTaskStatus(+b.dataset.drop, 'dropped')));
   body.querySelectorAll('[data-reopen]').forEach(b => b.addEventListener('click', () => setTaskStatus(+b.dataset.reopen, 'active')));
@@ -1352,14 +1398,57 @@ function saveTaskEdit(updateId) {
   scheduleSave();
 }
 
-function moveTask(index, direction) {
-  const list = state.data.tasks;
-  const target = index + direction;
-  if (target < 0 || target >= list.length) return;
-  const a = list[index].order || 0;
-  const b = list[target].order || 0;
-  list[index].order = b;
-  list[target].order = a;
+/* The list you can see, in the order you can see it. Used by the arrows and by
+   Tidy numbers, so both act on what's on screen rather than on the saved array —
+   the old arrows swapped with whatever sat next in the saved list, which could be a
+   completed task, making a click appear to do nothing at all. */
+function visibleTasks() {
+  const all = state.data ? state.data.tasks : [];
+  return all
+    .map((t, i) => ({ t, i }))
+    .filter(({ t }) => state.taskView === 'active' ? t.status === 'active' : t.status === 'completed')
+    .sort((a, b) => compareTasks(a, b, state.taskSort));
+}
+
+/* Give every task on screen a clean 1, 2, 3... in the order it's currently displayed.
+   Tasks in the other view keep their numbers. */
+function renumberVisible() {
+  visibleTasks().forEach(({ t }, pos) => { t.order = pos + 1; });
+}
+
+function setTaskRank(updateId, raw) {
+  const task = state.data.tasks.find(t => t.updateId === updateId);
+  if (!task) return;
+  const text = String(raw).trim();
+  if (text === '') {
+    delete task.order;              // blank means "no number" — sorts to the bottom
+  } else {
+    const n = Number(text);
+    if (!isFinite(n)) return;       // gibberish: leave the number alone
+    task.order = n;
+  }
+  renderTasks();
+  scheduleSave();
+}
+
+function moveTask(updateId, direction) {
+  const shown = visibleTasks();
+  const pos = shown.findIndex(({ t }) => t.updateId === updateId);
+  const targetPos = pos + direction;
+  if (pos === -1 || targetPos < 0 || targetPos >= shown.length) return;
+
+  const me = shown[pos].t;
+  const other = shown[targetPos].t;
+
+  // Swapping numbers only moves anything if the two differ. Equal or blank numbers
+  // mean the displayed order came from the tie-break, so clean the numbers first.
+  if (rankOf(me) === null || rankOf(other) === null || rankOf(me) === rankOf(other)) {
+    renumberVisible();
+  }
+  const mine = me.order;
+  me.order = other.order;
+  other.order = mine;
+
   renderTasks();
   scheduleSave();
 }
