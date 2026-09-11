@@ -160,6 +160,23 @@
     color: var(--ink);
   }
   textarea { font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; width: 100%; min-height: 140px; }
+  /* Free-text boxes (descriptions, comments). Text wraps onto the next line instead of
+     scrolling sideways, and the box grows as you type, up to a point, then scrolls.
+     Drag the bottom edge to resize one by hand. */
+  textarea.freetext {
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+    line-height: 1.4;
+    width: 100%;
+    min-height: 36px;
+    height: 36px;
+    max-height: 160px;
+    padding: 6px 9px;
+    resize: vertical;
+    overflow-y: auto;
+  }
+  /* Long text in the tables wraps over several lines rather than stretching the column. */
+  td.text-cell { white-space: pre-wrap; word-break: break-word; min-width: 130px; }
   button.action {
     font-family: 'Inter', sans-serif;
     font-weight: 600;
@@ -304,17 +321,17 @@
         <label>Category</label>
         <select id="entryCategory"></select>
       </div>
-      <div style="flex:1; min-width:180px;">
+      <div style="flex:1; min-width:220px;">
         <label>Description</label>
-        <input type="text" id="entryDescription" style="width:100%;">
+        <textarea id="entryDescription" class="freetext" rows="1"></textarea>
       </div>
       <div>
         <label>Rating (&minus;5 to +5)</label>
         <input type="number" id="entryRating" min="-5" max="5" step="1" style="width:70px;">
       </div>
-      <div style="flex:1; min-width:160px;">
+      <div style="flex:1; min-width:200px;">
         <label>Comments</label>
-        <input type="text" id="entryComments" style="width:100%;">
+        <textarea id="entryComments" class="freetext" rows="1"></textarea>
       </div>
       <div>
         <button class="action" id="addEntryBtn">Add entry</button>
@@ -370,9 +387,9 @@
           <option value="high">High</option>
         </select>
       </div>
-      <div style="flex:1; min-width:160px;">
+      <div style="flex:1; min-width:200px;">
         <label>Comments</label>
-        <input type="text" id="taskComments" style="width:100%;">
+        <textarea id="taskComments" class="freetext" rows="1"></textarea>
       </div>
       <div>
         <button class="action" id="addTaskBtn">Add task</button>
@@ -985,6 +1002,27 @@ function prefillStartTime(entries) {
   startEl.value = entries.reduce((latest, e) => (e.endTime > latest ? e.endTime : latest), entries[0].endTime);
 }
 
+/* Free-text boxes (descriptions, comments) grow to fit what's been typed, up to the
+   max height set in CSS, then scroll. Run on every keystroke and whenever a box is
+   drawn — the edit rows in the tables are rebuilt from scratch each render. */
+const FREETEXT_MAX_PX = 160;   // keep in step with max-height on textarea.freetext
+
+function autoGrowTextarea(el) {
+  if (!el) return;
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, FREETEXT_MAX_PX) + 'px';
+}
+
+function autoGrowAll(root) {
+  (root || document).querySelectorAll('textarea.freetext').forEach(autoGrowTextarea);
+}
+
+document.addEventListener('input', ev => {
+  if (ev.target && ev.target.matches && ev.target.matches('textarea.freetext')) {
+    autoGrowTextarea(ev.target);
+  }
+});
+
 function renderTimeLog() {
   document.getElementById('futureBlockWarning').style.display =
     state.selectedDate > todayStr() ? 'block' : 'none';
@@ -1019,9 +1057,9 @@ function renderTimeLog() {
         <td><input type="time" value="${e.startTime}" data-edit-start style="width:110px;"></td>
         <td><input type="time" value="${e.endTime}" data-edit-end style="width:110px;"></td>
         <td><select data-edit-category>${catOptions}</select></td>
-        <td><input type="text" value="${escapeHtml(e.description || '')}" data-edit-description style="width:100%;"></td>
+        <td><textarea class="freetext" data-edit-description rows="1">${escapeHtml(e.description || '')}</textarea></td>
         <td><input type="number" min="-5" max="5" step="1" value="${e.rating}" data-edit-rating style="width:60px;"></td>
-        <td><input type="text" value="${escapeHtml(e.comments || '')}" data-edit-comments style="width:100%;"></td>
+        <td><textarea class="freetext" data-edit-comments rows="1">${escapeHtml(e.comments || '')}</textarea></td>
         <td>
           <button class="action" data-save-entry="${escapeHtml(e.updateId)}">Save</button>
           <button class="ghost" data-cancel-entry>Cancel</button>
@@ -1030,9 +1068,9 @@ function renderTimeLog() {
       const ratingClass = e.rating > 0 ? 'rating-pos' : e.rating < 0 ? 'rating-neg' : 'rating-zero';
       tr.innerHTML = `
         <td>${e.startTime}</td><td>${e.endTime}</td><td>${escapeHtml(e.category)}</td>
-        <td>${escapeHtml(e.description || '')}</td>
+        <td class="text-cell">${escapeHtml(e.description || '')}</td>
         <td class="${ratingClass}">${e.rating > 0 ? '+' : ''}${e.rating}</td>
-        <td>${escapeHtml(e.comments || '')}</td>
+        <td class="text-cell">${escapeHtml(e.comments || '')}</td>
         <td>
           <button class="ghost" data-edit-entry="${escapeHtml(e.updateId)}">Edit</button>
           <button class="ghost" data-delete-entry="${escapeHtml(e.updateId)}">Delete</button>
@@ -1053,6 +1091,8 @@ function renderTimeLog() {
   body.querySelectorAll('[data-save-entry]').forEach(btn => {
     btn.addEventListener('click', () => saveTimeLogEdit(btn.dataset.saveEntry));
   });
+
+  autoGrowAll();
 }
 
 function saveTimeLogEdit(updateId) {
@@ -1233,7 +1273,7 @@ function renderTasks() {
             <option value="high" ${sel(t.importance,'high')}>high</option>
           </select>
         </td>
-        <td><input type="text" value="${escapeHtml(t.comments || '')}" data-edit-task-comments style="width:100%;"></td>
+        <td><textarea class="freetext" data-edit-task-comments rows="1">${escapeHtml(t.comments || '')}</textarea></td>
         <td>
           <button class="action" data-save-task="${escapeHtml(t.updateId)}">Save</button>
           <button class="ghost" data-cancel-task>Cancel</button>
@@ -1245,11 +1285,11 @@ function renderTasks() {
           ${sort ? '' : `<button class="ghost" data-up="${i}">&uarr;</button>
           <button class="ghost" data-down="${i}">&darr;</button>`}
         </td>
-        <td>${escapeHtml(t.title)}</td>
+        <td class="text-cell">${escapeHtml(t.title)}</td>
         <td>${timing}</td>
         <td><span class="chip chip-${t.urgency}">${t.urgency}</span></td>
         <td><span class="chip chip-${t.importance}">${t.importance}</span></td>
-        <td>${escapeHtml(t.comments || '')}</td>
+        <td class="text-cell">${escapeHtml(t.comments || '')}</td>
         <td>
           <button class="ghost" data-edit-task="${escapeHtml(t.updateId)}">Edit</button>
           ${state.taskView === 'active'
@@ -1272,6 +1312,8 @@ function renderTasks() {
     const dd = ev.target.closest('tr').querySelector('[data-edit-duedate]');
     dd.style.display = ev.target.value === 'date' ? '' : 'none';
   }));
+
+  autoGrowAll();
 }
 
 function saveTaskEdit(updateId) {
