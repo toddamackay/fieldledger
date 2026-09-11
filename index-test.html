@@ -127,10 +127,12 @@
     border-bottom: 1px solid var(--paper);
     box-shadow: 0 -2px 0 var(--brass) inset;
   }
+  /* The ledger fills the window rather than sitting in a 900px column, so wide screens
+     give the description and comments columns room to breathe. */
   main {
     padding: 20px;
-    max-width: 900px;
-    margin: 0 auto;
+    width: 100%;
+    margin: 0;
   }
   .panel {
     background: var(--card);
@@ -211,6 +213,9 @@
   .banner.warn { background: #fbf0da; border: 1px solid var(--warn); color: #6b4b1a; }
   .banner.fail { background: #fbe4e0; border: 1px solid var(--fail); color: #7a2a20; }
   .banner.info { background: #e7edf5; border: 1px solid #6b84a8; color: #2a3f5c; }
+  /* On a window too narrow for all the columns, the table scrolls sideways inside its
+     own box — the page itself never does. */
+  .table-scroll { overflow-x: auto; }
   table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
   th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--paper-line); }
   th { font-family: 'IBM Plex Mono', monospace; font-size: 11px; text-transform: uppercase; color: var(--ink-soft); letter-spacing: 0.4px; }
@@ -255,8 +260,7 @@
   .taskTabs { display: flex; gap: 6px; margin-bottom: 14px; }
   .taskTabs button.sub-active { background: var(--ink); color: var(--paper); border-color: var(--ink); }
   .config-banner {
-    max-width: 900px;
-    margin: 16px auto 0;
+    margin: 16px 20px 0;
     padding: 14px 18px;
     background: #fbf0da;
     border: 1px solid var(--warn);
@@ -265,6 +269,14 @@
     color: #6b4b1a;
   }
   .config-banner code { background: #f2e0b8; padding: 1px 5px; border-radius: 2px; }
+  /* On a narrow window, claw back the side padding so the tables get the space instead. */
+  @media (max-width: 640px) {
+    main { padding: 12px; }
+    header { padding: 12px 14px; }
+    nav.tabs { padding: 10px 12px 0; }
+    .panel { padding: 12px; }
+    .config-banner { margin: 12px; }
+  }
 </style>
 </head>
 <body>
@@ -344,12 +356,14 @@
       </div>
     </div>
 
-    <table id="timeLogTable">
-      <thead>
-        <tr><th>Start</th><th>End</th><th>Category</th><th>Description</th><th>Rating</th><th>Comments</th><th></th></tr>
-      </thead>
-      <tbody id="timeLogBody"></tbody>
-    </table>
+    <div class="table-scroll">
+      <table id="timeLogTable">
+        <thead>
+          <tr><th>Start</th><th>End</th><th>Category</th><th>Description</th><th>Rating</th><th>Comments</th><th></th></tr>
+        </thead>
+        <tbody id="timeLogBody"></tbody>
+      </table>
+    </div>
     <div class="empty-state" id="timeLogEmpty" style="display:none;">No entries logged for this date.</div>
   </section>
 
@@ -403,20 +417,22 @@
       </div>
     </div>
 
-    <table id="taskTable">
-      <thead>
-        <tr>
-          <th class="sortable" data-sort="rank">Rank</th>
-          <th>Title</th>
-          <th class="sortable" data-sort="timing">Timing</th>
-          <th class="sortable" data-sort="urgency">Urgency</th>
-          <th class="sortable" data-sort="importance">Importance</th>
-          <th>Comments</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody id="taskBody"></tbody>
-    </table>
+    <div class="table-scroll">
+      <table id="taskTable">
+        <thead>
+          <tr>
+            <th class="sortable" data-sort="rank">Rank</th>
+            <th>Title</th>
+            <th class="sortable" data-sort="timing">Timing</th>
+            <th class="sortable" data-sort="urgency">Urgency</th>
+            <th class="sortable" data-sort="importance">Importance</th>
+            <th>Comments</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="taskBody"></tbody>
+      </table>
+    </div>
     <div class="empty-state" id="taskEmpty" style="display:none;">Nothing here yet.</div>
   </section>
 
