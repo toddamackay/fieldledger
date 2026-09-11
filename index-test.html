@@ -1002,6 +1002,16 @@ function prefillStartTime(entries) {
   startEl.value = entries.reduce((latest, e) => (e.endTime > latest ? e.endTime : latest), entries[0].endTime);
 }
 
+/* Times are stored 24-hour ("14:30") because that's what sorts, compares and validates
+   cleanly — and what the schema requires. This is display only: the table shows the same
+   value as "2:30 PM", matching the 12-hour clock the time pickers already use. */
+function to12Hour(hhmm) {
+  if (!/^\d{1,2}:\d{2}$/.test(hhmm || '')) return hhmm || '';
+  const [h, m] = hhmm.split(':').map(Number);
+  const hour12 = h % 12 === 0 ? 12 : h % 12;
+  return `${hour12}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`;
+}
+
 /* Free-text boxes (descriptions, comments) grow to fit what's been typed, up to the
    max height set in CSS, then scroll. Run on every keystroke and whenever a box is
    drawn — the edit rows in the tables are rebuilt from scratch each render. */
@@ -1067,7 +1077,7 @@ function renderTimeLog() {
     } else {
       const ratingClass = e.rating > 0 ? 'rating-pos' : e.rating < 0 ? 'rating-neg' : 'rating-zero';
       tr.innerHTML = `
-        <td>${e.startTime}</td><td>${e.endTime}</td><td>${escapeHtml(e.category)}</td>
+        <td>${to12Hour(e.startTime)}</td><td>${to12Hour(e.endTime)}</td><td>${escapeHtml(e.category)}</td>
         <td class="text-cell">${escapeHtml(e.description || '')}</td>
         <td class="${ratingClass}">${e.rating > 0 ? '+' : ''}${e.rating}</td>
         <td class="text-cell">${escapeHtml(e.comments || '')}</td>
