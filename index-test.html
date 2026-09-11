@@ -143,6 +143,11 @@
   }
   .panel.active { display: block; }
   .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 14px; }
+  /* Every box in an entry row is the same height so the row reads as one straight line.
+     The textareas are display:block because an inline element leaves a few pixels of
+     baseline gap underneath, which pushed them up out of line with the other boxes. */
+  .row input, .row select, .row button { height: 36px; }
+  .row textarea.freetext { display: block; min-height: 36px; }
   label {
     display: block;
     font-size: 11px;
@@ -1061,11 +1066,13 @@ function to12Hour(hhmm) {
    max height set in CSS, then scroll. Run on every keystroke and whenever a box is
    drawn — the edit rows in the tables are rebuilt from scratch each render. */
 const FREETEXT_MAX_PX = 160;   // keep in step with max-height on textarea.freetext
+const FREETEXT_MIN_PX = 36;    // keep in step with the row box height in CSS
 
 function autoGrowTextarea(el) {
   if (!el) return;
   el.style.height = 'auto';
-  el.style.height = Math.min(el.scrollHeight, FREETEXT_MAX_PX) + 'px';
+  // Never shorter than a standard box, so an empty one still lines up with its neighbours.
+  el.style.height = Math.max(FREETEXT_MIN_PX, Math.min(el.scrollHeight, FREETEXT_MAX_PX)) + 'px';
 }
 
 function autoGrowAll(root) {
