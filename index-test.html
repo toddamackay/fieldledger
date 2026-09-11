@@ -201,6 +201,10 @@
   th.sortable:hover { color: var(--brass-dark); }
   th.sortable.sorted-by { color: var(--ink); }
   th.sortable .arrow { font-size: 9px; margin-left: 3px; }
+  /* Faint up-down arrow on every sortable column, so it's obvious they can be clicked
+     before you've clicked one. Goes solid and one-directional once that column is sorted. */
+  th.sortable .arrow.idle { opacity: 0.4; }
+  th.sortable:hover .arrow.idle { opacity: 1; }
   .chip {
     display: inline-block;
     font-family: 'IBM Plex Mono', monospace;
@@ -1176,7 +1180,7 @@ function renderTaskSortHeaders() {
     const label = th.dataset.sort.charAt(0).toUpperCase() + th.dataset.sort.slice(1);
     th.innerHTML = active
       ? `${label}<span class="arrow">${state.taskSort.dir === 1 ? '&#9650;' : '&#9660;'}</span>`
-      : label;
+      : `${label}<span class="arrow idle">&#8645;</span>`;
   });
   document.getElementById('clearTaskSortBtn').style.display = state.taskSort ? 'inline-block' : 'none';
 }
