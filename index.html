@@ -126,10 +126,12 @@
     border-bottom: 1px solid var(--paper);
     box-shadow: 0 -2px 0 var(--brass) inset;
   }
+  /* The ledger fills the window rather than sitting in a 900px column, so wide screens
+     give the description and comments columns room to breathe. */
   main {
     padding: 20px;
-    max-width: 900px;
-    margin: 0 auto;
+    width: 100%;
+    margin: 0;
   }
   .panel {
     background: var(--card);
@@ -140,6 +142,11 @@
   }
   .panel.active { display: block; }
   .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 14px; }
+  /* Every box in an entry row is the same height so the row reads as one straight line.
+     The textareas are display:block because an inline element leaves a few pixels of
+     baseline gap underneath, which pushed them up out of line with the other boxes. */
+  .row input, .row select, .row button { height: 36px; }
+  .row textarea.freetext { display: block; min-height: 36px; }
   label {
     display: block;
     font-size: 11px;
@@ -159,6 +166,23 @@
     color: var(--ink);
   }
   textarea { font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; width: 100%; min-height: 140px; }
+  /* Free-text boxes (descriptions, comments). Text wraps onto the next line instead of
+     scrolling sideways, and the box grows as you type, up to a point, then scrolls.
+     Drag the bottom edge to resize one by hand. */
+  textarea.freetext {
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+    line-height: 1.4;
+    width: 100%;
+    min-height: 36px;
+    height: 36px;
+    max-height: 160px;
+    padding: 6px 9px;
+    resize: vertical;
+    overflow-y: auto;
+  }
+  /* Long text in the tables wraps over several lines rather than stretching the column. */
+  td.text-cell { white-space: pre-wrap; word-break: break-word; min-width: 130px; }
   button.action {
     font-family: 'Inter', sans-serif;
     font-weight: 600;
@@ -193,9 +217,24 @@
   .banner.warn { background: #fbf0da; border: 1px solid var(--warn); color: #6b4b1a; }
   .banner.fail { background: #fbe4e0; border: 1px solid var(--fail); color: #7a2a20; }
   .banner.info { background: #e7edf5; border: 1px solid #6b84a8; color: #2a3f5c; }
+  /* On a window too narrow for all the columns, the table scrolls sideways inside its
+     own box — the page itself never does. */
+  .table-scroll { overflow-x: auto; }
   table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  /* Column widths are set deliberately in each table's colgroup rather than left to the
+     browser, which otherwise hands the most space to whichever column happens to hold the
+     longest text. Below the min-width the table scrolls sideways instead of being crushed. */
+  #timeLogTable, #taskTable { table-layout: fixed; min-width: 900px; }
   th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--paper-line); }
   th { font-family: 'IBM Plex Mono', monospace; font-size: 11px; text-transform: uppercase; color: var(--ink-soft); letter-spacing: 0.4px; }
+  th.sortable { cursor: pointer; user-select: none; }
+  th.sortable:hover { color: var(--brass-dark); }
+  th.sortable.sorted-by { color: var(--ink); }
+  th.sortable .arrow { font-size: 9px; margin-left: 3px; }
+  /* Faint up-down arrow on every sortable column, so it's obvious they can be clicked
+     before you've clicked one. Goes solid and one-directional once that column is sorted. */
+  th.sortable .arrow.idle { opacity: 0.4; }
+  th.sortable:hover .arrow.idle { opacity: 1; }
   .chip {
     display: inline-block;
     font-family: 'IBM Plex Mono', monospace;
@@ -211,6 +250,12 @@
   .rating-neg { color: var(--fail); font-weight: 600; }
   .rating-zero { color: var(--ink-soft); }
   .order-btns button { font-size: 11px; padding: 2px 6px; }
+  /* Rank column: type a number to place a task. Decimals are allowed, so you can
+     slot something between 3 and 4 as 3.5 without renumbering the rest. */
+  .rank-cell { white-space: nowrap; vertical-align: top; }
+  input.rank-box { width: 56px; font-size: 13px; padding: 4px 5px; text-align: right; }
+  .rank-cell .order-btns { margin-top: 3px; }
+  .rank-plain { font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--ink-soft); }
   #dateNav { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
   #dateNav span { font-family: 'IBM Plex Mono', monospace; font-size: 14px; font-weight: 500; }
   .empty-state {
@@ -223,8 +268,7 @@
   .taskTabs { display: flex; gap: 6px; margin-bottom: 14px; }
   .taskTabs button.sub-active { background: var(--ink); color: var(--paper); border-color: var(--ink); }
   .config-banner {
-    max-width: 900px;
-    margin: 16px auto 0;
+    margin: 16px 20px 0;
     padding: 14px 18px;
     background: #fbf0da;
     border: 1px solid var(--warn);
@@ -233,6 +277,14 @@
     color: #6b4b1a;
   }
   .config-banner code { background: #f2e0b8; padding: 1px 5px; border-radius: 2px; }
+  /* On a narrow window, claw back the side padding so the tables get the space instead. */
+  @media (max-width: 640px) {
+    main { padding: 12px; }
+    header { padding: 12px 14px; }
+    nav.tabs { padding: 10px 12px 0; }
+    .panel { padding: 12px; }
+    .config-banner { margin: 12px; }
+  }
 </style>
 </head>
 <body>
@@ -295,29 +347,40 @@
         <label>Category</label>
         <select id="entryCategory"></select>
       </div>
-      <div style="flex:1; min-width:180px;">
+      <div style="flex:1 1 200px; max-width:300px;">
         <label>Description</label>
-        <input type="text" id="entryDescription" style="width:100%;">
+        <textarea id="entryDescription" class="freetext" rows="1"></textarea>
       </div>
       <div>
         <label>Rating (&minus;5 to +5)</label>
         <input type="number" id="entryRating" min="-5" max="5" step="1" style="width:70px;">
       </div>
-      <div style="flex:1; min-width:160px;">
+      <div style="flex:4 1 280px;">
         <label>Comments</label>
-        <input type="text" id="entryComments" style="width:100%;">
+        <textarea id="entryComments" class="freetext" rows="1"></textarea>
       </div>
       <div>
         <button class="action" id="addEntryBtn">Add entry</button>
       </div>
     </div>
 
-    <table id="timeLogTable">
-      <thead>
-        <tr><th>Start</th><th>End</th><th>Category</th><th>Description</th><th>Rating</th><th>Comments</th><th></th></tr>
-      </thead>
-      <tbody id="timeLogBody"></tbody>
-    </table>
+    <div class="table-scroll">
+      <table id="timeLogTable">
+        <colgroup>
+          <col style="width:96px;">   <!-- Start -->
+          <col style="width:96px;">   <!-- End -->
+          <col style="width:118px;">  <!-- Category -->
+          <col style="width:20%;">    <!-- Description: short, title-like -->
+          <col style="width:76px;">   <!-- Rating -->
+          <col style="width:46%;">    <!-- Comments: the roomy one -->
+          <col style="width:132px;">  <!-- Edit / Delete -->
+        </colgroup>
+        <thead>
+          <tr><th>Start</th><th>End</th><th>Category</th><th>Description</th><th>Rating</th><th>Comments</th><th></th></tr>
+        </thead>
+        <tbody id="timeLogBody"></tbody>
+      </table>
+    </div>
     <div class="empty-state" id="timeLogEmpty" style="display:none;">No entries logged for this date.</div>
   </section>
 
@@ -326,10 +389,12 @@
     <div class="taskTabs">
       <button class="ghost sub-active" data-tasktab="active">Active</button>
       <button class="ghost" data-tasktab="completed">Completed</button>
+      <button class="ghost" id="tidyRanksBtn" style="margin-left:auto;" title="Renumber the tasks you can see as 1, 2, 3...">&#9776; Tidy numbers</button>
+      <button class="ghost" id="clearTaskSortBtn" style="display:none;">&#8635; Rank order</button>
     </div>
 
     <div class="row">
-      <div style="flex:1; min-width:180px;">
+      <div style="flex:1 1 180px; max-width:280px;">
         <label>Title</label>
         <input type="text" id="taskTitle" style="width:100%;">
       </div>
@@ -360,21 +425,40 @@
           <option value="high">High</option>
         </select>
       </div>
-      <div style="flex:1; min-width:160px;">
+      <div style="flex:4 1 280px;">
         <label>Comments</label>
-        <input type="text" id="taskComments" style="width:100%;">
+        <textarea id="taskComments" class="freetext" rows="1"></textarea>
       </div>
       <div>
         <button class="action" id="addTaskBtn">Add task</button>
       </div>
     </div>
 
-    <table id="taskTable">
-      <thead>
-        <tr><th></th><th>Title</th><th>Timing</th><th>Urgency</th><th>Importance</th><th>Comments</th><th></th></tr>
-      </thead>
-      <tbody id="taskBody"></tbody>
-    </table>
+    <div class="table-scroll">
+      <table id="taskTable">
+        <colgroup>
+          <col style="width:78px;">   <!-- Rank -->
+          <col style="width:22%;">    <!-- Title -->
+          <col style="width:118px;">  <!-- Timing -->
+          <col style="width:106px;">  <!-- Urgency -->
+          <col style="width:118px;">  <!-- Importance -->
+          <col style="width:40%;">    <!-- Comments: the roomy one -->
+          <col style="width:158px;">  <!-- Edit / Complete / Drop -->
+        </colgroup>
+        <thead>
+          <tr>
+            <th class="sortable" data-sort="rank">Rank</th>
+            <th>Title</th>
+            <th class="sortable" data-sort="timing">Timing</th>
+            <th class="sortable" data-sort="urgency">Urgency</th>
+            <th class="sortable" data-sort="importance">Importance</th>
+            <th>Comments</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="taskBody"></tbody>
+      </table>
+    </div>
     <div class="empty-state" id="taskEmpty" style="display:none;">Nothing here yet.</div>
   </section>
 
@@ -457,6 +541,7 @@ const state = {
   lastFailedSaveFn: null,     // for Retry
   selectedDate: todayStr(),
   taskView: 'active',
+  taskSort: null,          // {field:'timing'|'urgency'|'importance', dir:1|-1} or null for the manual (arrow-button) order
   editingEntryId: null,   // updateId of the time log entry currently being edited inline, or null
   editingTaskId: null,    // updateId of the task currently being edited inline, or null
   pickerInited: false,
@@ -963,6 +1048,39 @@ function prefillStartTime(entries) {
   startEl.value = entries.reduce((latest, e) => (e.endTime > latest ? e.endTime : latest), entries[0].endTime);
 }
 
+/* Times are stored 24-hour ("14:30") because that's what sorts, compares and validates
+   cleanly — and what the schema requires. This is display only: the table shows the same
+   value as "2:30 PM", matching the 12-hour clock the time pickers already use. */
+function to12Hour(hhmm) {
+  if (!/^\d{1,2}:\d{2}$/.test(hhmm || '')) return hhmm || '';
+  const [h, m] = hhmm.split(':').map(Number);
+  const hour12 = h % 12 === 0 ? 12 : h % 12;
+  return `${hour12}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`;
+}
+
+/* Free-text boxes (descriptions, comments) grow to fit what's been typed, up to the
+   max height set in CSS, then scroll. Run on every keystroke and whenever a box is
+   drawn — the edit rows in the tables are rebuilt from scratch each render. */
+const FREETEXT_MAX_PX = 160;   // keep in step with max-height on textarea.freetext
+const FREETEXT_MIN_PX = 36;    // keep in step with the row box height in CSS
+
+function autoGrowTextarea(el) {
+  if (!el) return;
+  el.style.height = 'auto';
+  // Never shorter than a standard box, so an empty one still lines up with its neighbours.
+  el.style.height = Math.max(FREETEXT_MIN_PX, Math.min(el.scrollHeight, FREETEXT_MAX_PX)) + 'px';
+}
+
+function autoGrowAll(root) {
+  (root || document).querySelectorAll('textarea.freetext').forEach(autoGrowTextarea);
+}
+
+document.addEventListener('input', ev => {
+  if (ev.target && ev.target.matches && ev.target.matches('textarea.freetext')) {
+    autoGrowTextarea(ev.target);
+  }
+});
+
 function renderTimeLog() {
   document.getElementById('futureBlockWarning').style.display =
     state.selectedDate > todayStr() ? 'block' : 'none';
@@ -994,12 +1112,12 @@ function renderTimeLog() {
         `<option value="${escapeHtml(c)}" ${c === e.category ? 'selected' : ''}>${escapeHtml(c)}</option>`
       ).join('');
       tr.innerHTML = `
-        <td><input type="time" value="${e.startTime}" data-edit-start style="width:110px;"></td>
-        <td><input type="time" value="${e.endTime}" data-edit-end style="width:110px;"></td>
+        <td><input type="time" value="${e.startTime}" data-edit-start style="width:100%;"></td>
+        <td><input type="time" value="${e.endTime}" data-edit-end style="width:100%;"></td>
         <td><select data-edit-category>${catOptions}</select></td>
-        <td><input type="text" value="${escapeHtml(e.description || '')}" data-edit-description style="width:100%;"></td>
-        <td><input type="number" min="-5" max="5" step="1" value="${e.rating}" data-edit-rating style="width:60px;"></td>
-        <td><input type="text" value="${escapeHtml(e.comments || '')}" data-edit-comments style="width:100%;"></td>
+        <td><textarea class="freetext" data-edit-description rows="1">${escapeHtml(e.description || '')}</textarea></td>
+        <td><input type="number" min="-5" max="5" step="1" value="${e.rating}" data-edit-rating style="width:100%;"></td>
+        <td><textarea class="freetext" data-edit-comments rows="1">${escapeHtml(e.comments || '')}</textarea></td>
         <td>
           <button class="action" data-save-entry="${escapeHtml(e.updateId)}">Save</button>
           <button class="ghost" data-cancel-entry>Cancel</button>
@@ -1007,10 +1125,10 @@ function renderTimeLog() {
     } else {
       const ratingClass = e.rating > 0 ? 'rating-pos' : e.rating < 0 ? 'rating-neg' : 'rating-zero';
       tr.innerHTML = `
-        <td>${e.startTime}</td><td>${e.endTime}</td><td>${escapeHtml(e.category)}</td>
-        <td>${escapeHtml(e.description || '')}</td>
+        <td>${to12Hour(e.startTime)}</td><td>${to12Hour(e.endTime)}</td><td>${escapeHtml(e.category)}</td>
+        <td class="text-cell">${escapeHtml(e.description || '')}</td>
         <td class="${ratingClass}">${e.rating > 0 ? '+' : ''}${e.rating}</td>
-        <td>${escapeHtml(e.comments || '')}</td>
+        <td class="text-cell">${escapeHtml(e.comments || '')}</td>
         <td>
           <button class="ghost" data-edit-entry="${escapeHtml(e.updateId)}">Edit</button>
           <button class="ghost" data-delete-entry="${escapeHtml(e.updateId)}">Delete</button>
@@ -1031,6 +1149,8 @@ function renderTimeLog() {
   body.querySelectorAll('[data-save-entry]').forEach(btn => {
     btn.addEventListener('click', () => saveTimeLogEdit(btn.dataset.saveEntry));
   });
+
+  autoGrowAll();
 }
 
 function saveTimeLogEdit(updateId) {
@@ -1112,7 +1232,9 @@ document.getElementById('addTaskBtn').addEventListener('click', () => {
     urgency,
     importance,
     status: 'active',
-    order: state.data.tasks.length,
+    // One past the highest number in use, so a new task lands at the bottom of the
+    // rank order even after you've renumbered things by hand.
+    order: Math.max(0, ...state.data.tasks.map(t => rankOf(t) === null ? 0 : rankOf(t))) + 1,
     comments
   });
 
@@ -1122,15 +1244,97 @@ document.getElementById('addTaskBtn').addEventListener('click', () => {
   scheduleSave();
 });
 
+/* Column sorting for the task table. Each sortable field maps a task to a comparable
+   key, plus the direction the first click should use — for urgency and importance that's
+   high-to-low, for timing it's soonest-first, since those are what you'd want to see.
+   Clicking the same header again flips the direction. */
+const TASK_SORT = {
+  urgency:    { key: t => ({ low: 1, medium: 2, high: 3 }[t.urgency] || 0),    firstDir: -1 },
+  importance: { key: t => ({ low: 1, medium: 2, high: 3 }[t.importance] || 0), firstDir: -1 },
+  // ASAP counts as the soonest thing there is; a "specific date" with no date set
+  // sorts to the far end rather than jumbling in with the real dates.
+  timing:     { key: t => t.dueType === 'asap' ? '0000-00-00' : (t.dueDate || '9999-12-31'), firstDir: 1 },
+  // Rank is the number you type in. A task with no number sorts to the bottom.
+  rank:       { key: t => rankOf(t) === null ? Infinity : rankOf(t), firstDir: 1 }
+};
+
+/* The rank number lives in the task's existing "order" value, so nothing new is stored
+   and older saved files keep working. Anything that isn't a usable number counts as blank. */
+function rankOf(t) {
+  const n = Number(t.order);
+  return (t.order === null || t.order === undefined || t.order === '' || !isFinite(n)) ? null : n;
+}
+
+/* Ties fall back to rank, then to the order the tasks were created in, so a list never
+   shuffles about on its own between renders. */
+function compareTasks(a, b, sort) {
+  const field = sort ? sort.field : 'rank';
+  const dir = sort ? sort.dir : 1;
+  const ka = TASK_SORT[field].key(a.t);
+  const kb = TASK_SORT[field].key(b.t);
+  if (ka < kb) return -1 * dir;
+  if (ka > kb) return 1 * dir;
+  if (field !== 'rank') {
+    const ra = rankOf(a.t) === null ? Infinity : rankOf(a.t);
+    const rb = rankOf(b.t) === null ? Infinity : rankOf(b.t);
+    if (ra !== rb) return ra - rb;
+  }
+  return a.i - b.i;   // oldest first
+}
+
+/* The up/down arrows only make sense while the list is in rank order — otherwise
+   "up" would mean moving against whatever column you've sorted by. */
+function arrowsUsable() {
+  return !state.taskSort || (state.taskSort.field === 'rank' && state.taskSort.dir === 1);
+}
+
+function sortTasksBy(field) {
+  if (!TASK_SORT[field]) return;
+  state.taskSort = (state.taskSort && state.taskSort.field === field)
+    ? { field, dir: -state.taskSort.dir }          // same header again — reverse it
+    : { field, dir: TASK_SORT[field].firstDir };   // new header — start in its natural direction
+  renderTasks();
+}
+
+document.querySelectorAll('#taskTable th.sortable').forEach(th => {
+  th.addEventListener('click', () => sortTasksBy(th.dataset.sort));
+});
+
+document.getElementById('clearTaskSortBtn').addEventListener('click', () => {
+  state.taskSort = null;
+  renderTasks();
+});
+
+document.getElementById('tidyRanksBtn').addEventListener('click', () => {
+  if (!state.data || !visibleTasks().length) return;
+  renumberVisible();
+  renderTasks();
+  scheduleSave();
+});
+
+function renderTaskSortHeaders() {
+  document.querySelectorAll('#taskTable th.sortable').forEach(th => {
+    const active = state.taskSort && state.taskSort.field === th.dataset.sort;
+    th.classList.toggle('sorted-by', !!active);
+    const label = th.dataset.sort.charAt(0).toUpperCase() + th.dataset.sort.slice(1);
+    th.innerHTML = active
+      ? `${label}<span class="arrow">${state.taskSort.dir === 1 ? '&#9650;' : '&#9660;'}</span>`
+      : `${label}<span class="arrow idle">&#8645;</span>`;
+  });
+  document.getElementById('clearTaskSortBtn').style.display = state.taskSort ? 'inline-block' : 'none';
+}
+
 function renderTasks() {
   const body = document.getElementById('taskBody');
   body.innerHTML = '';
   const all = state.data ? state.data.tasks : [];
+  const sort = state.taskSort;
   const visible = all
     .map((t, i) => ({ t, i }))
     .filter(({ t }) => state.taskView === 'active' ? t.status === 'active' : t.status === 'completed')
-    .sort((a, b) => (a.t.order || 0) - (b.t.order || 0));
+    .sort((a, b) => compareTasks(a, b, sort));
 
+  renderTaskSortHeaders();
   document.getElementById('taskEmpty').style.display = visible.length ? 'none' : 'block';
 
   visible.forEach(({ t, i }, pos) => {
@@ -1138,14 +1342,14 @@ function renderTasks() {
     if (state.editingTaskId === t.updateId) {
       const sel = (val, opt) => val === opt ? 'selected' : '';
       tr.innerHTML = `
-        <td class="order-btns"></td>
+        <td class="rank-cell"><span class="rank-plain">${rankOf(t) === null ? '&mdash;' : rankOf(t)}</span></td>
         <td><input type="text" value="${escapeHtml(t.title)}" data-edit-title style="width:100%;"></td>
         <td>
-          <select data-edit-duetype style="width:90px;">
+          <select data-edit-duetype style="width:100%;">
             <option value="asap" ${sel(t.dueType,'asap')}>ASAP</option>
             <option value="date" ${sel(t.dueType,'date')}>Date</option>
           </select>
-          <input type="date" value="${t.dueDate || ''}" data-edit-duedate style="${t.dueType === 'date' ? '' : 'display:none;'}">
+          <input type="date" value="${t.dueDate || ''}" data-edit-duedate style="width:100%; ${t.dueType === 'date' ? '' : 'display:none;'}">
         </td>
         <td>
           <select data-edit-urgency>
@@ -1161,7 +1365,7 @@ function renderTasks() {
             <option value="high" ${sel(t.importance,'high')}>high</option>
           </select>
         </td>
-        <td><input type="text" value="${escapeHtml(t.comments || '')}" data-edit-task-comments style="width:100%;"></td>
+        <td><textarea class="freetext" data-edit-task-comments rows="1">${escapeHtml(t.comments || '')}</textarea></td>
         <td>
           <button class="action" data-save-task="${escapeHtml(t.updateId)}">Save</button>
           <button class="ghost" data-cancel-task>Cancel</button>
@@ -1169,15 +1373,19 @@ function renderTasks() {
     } else {
       const timing = t.dueType === 'asap' ? 'ASAP' : t.dueDate;
       tr.innerHTML = `
-        <td class="order-btns">
-          <button class="ghost" data-up="${i}">&uarr;</button>
-          <button class="ghost" data-down="${i}">&darr;</button>
+        <td class="rank-cell">
+          <input type="number" step="any" class="rank-box" value="${rankOf(t) === null ? '' : rankOf(t)}"
+                 data-rank="${escapeHtml(t.updateId)}" title="Type a number to rank this task. Decimals are fine — 3.5 sits between 3 and 4.">
+          ${arrowsUsable() ? `<div class="order-btns">
+            <button class="ghost" data-up="${escapeHtml(t.updateId)}" title="Move up one">&uarr;</button>
+            <button class="ghost" data-down="${escapeHtml(t.updateId)}" title="Move down one">&darr;</button>
+          </div>` : ''}
         </td>
-        <td>${escapeHtml(t.title)}</td>
+        <td class="text-cell">${escapeHtml(t.title)}</td>
         <td>${timing}</td>
         <td><span class="chip chip-${t.urgency}">${t.urgency}</span></td>
         <td><span class="chip chip-${t.importance}">${t.importance}</span></td>
-        <td>${escapeHtml(t.comments || '')}</td>
+        <td class="text-cell">${escapeHtml(t.comments || '')}</td>
         <td>
           <button class="ghost" data-edit-task="${escapeHtml(t.updateId)}">Edit</button>
           ${state.taskView === 'active'
@@ -1188,8 +1396,9 @@ function renderTasks() {
     body.appendChild(tr);
   });
 
-  body.querySelectorAll('[data-up]').forEach(b => b.addEventListener('click', () => moveTask(+b.dataset.up, -1)));
-  body.querySelectorAll('[data-down]').forEach(b => b.addEventListener('click', () => moveTask(+b.dataset.down, 1)));
+  body.querySelectorAll('[data-up]').forEach(b => b.addEventListener('click', () => moveTask(b.dataset.up, -1)));
+  body.querySelectorAll('[data-down]').forEach(b => b.addEventListener('click', () => moveTask(b.dataset.down, 1)));
+  body.querySelectorAll('[data-rank]').forEach(box => box.addEventListener('change', () => setTaskRank(box.dataset.rank, box.value)));
   body.querySelectorAll('[data-complete]').forEach(b => b.addEventListener('click', () => setTaskStatus(+b.dataset.complete, 'completed')));
   body.querySelectorAll('[data-drop]').forEach(b => b.addEventListener('click', () => setTaskStatus(+b.dataset.drop, 'dropped')));
   body.querySelectorAll('[data-reopen]').forEach(b => b.addEventListener('click', () => setTaskStatus(+b.dataset.reopen, 'active')));
@@ -1200,6 +1409,8 @@ function renderTasks() {
     const dd = ev.target.closest('tr').querySelector('[data-edit-duedate]');
     dd.style.display = ev.target.value === 'date' ? '' : 'none';
   }));
+
+  autoGrowAll();
 }
 
 function saveTaskEdit(updateId) {
@@ -1228,14 +1439,57 @@ function saveTaskEdit(updateId) {
   scheduleSave();
 }
 
-function moveTask(index, direction) {
-  const list = state.data.tasks;
-  const target = index + direction;
-  if (target < 0 || target >= list.length) return;
-  const a = list[index].order || 0;
-  const b = list[target].order || 0;
-  list[index].order = b;
-  list[target].order = a;
+/* The list you can see, in the order you can see it. Used by the arrows and by
+   Tidy numbers, so both act on what's on screen rather than on the saved array —
+   the old arrows swapped with whatever sat next in the saved list, which could be a
+   completed task, making a click appear to do nothing at all. */
+function visibleTasks() {
+  const all = state.data ? state.data.tasks : [];
+  return all
+    .map((t, i) => ({ t, i }))
+    .filter(({ t }) => state.taskView === 'active' ? t.status === 'active' : t.status === 'completed')
+    .sort((a, b) => compareTasks(a, b, state.taskSort));
+}
+
+/* Give every task on screen a clean 1, 2, 3... in the order it's currently displayed.
+   Tasks in the other view keep their numbers. */
+function renumberVisible() {
+  visibleTasks().forEach(({ t }, pos) => { t.order = pos + 1; });
+}
+
+function setTaskRank(updateId, raw) {
+  const task = state.data.tasks.find(t => t.updateId === updateId);
+  if (!task) return;
+  const text = String(raw).trim();
+  if (text === '') {
+    delete task.order;              // blank means "no number" — sorts to the bottom
+  } else {
+    const n = Number(text);
+    if (!isFinite(n)) return;       // gibberish: leave the number alone
+    task.order = n;
+  }
+  renderTasks();
+  scheduleSave();
+}
+
+function moveTask(updateId, direction) {
+  const shown = visibleTasks();
+  const pos = shown.findIndex(({ t }) => t.updateId === updateId);
+  const targetPos = pos + direction;
+  if (pos === -1 || targetPos < 0 || targetPos >= shown.length) return;
+
+  const me = shown[pos].t;
+  const other = shown[targetPos].t;
+
+  // Swapping numbers only moves anything if the two differ. Equal or blank numbers
+  // mean the displayed order came from the tie-break, so clean the numbers first.
+  if (rankOf(me) === null || rankOf(other) === null || rankOf(me) === rankOf(other)) {
+    renumberVisible();
+  }
+  const mine = me.order;
+  me.order = other.order;
+  other.order = mine;
+
   renderTasks();
   scheduleSave();
 }
