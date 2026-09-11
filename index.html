@@ -3,35 +3,29 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Field Ledger</title>
+<title>Field Ledger (local test)</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Zilla+Slab:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root {
-    --paper: #f2f0e8;
-    --paper-line: #dcd8c8;
-    --ink: #1e2a38;
-    --ink-soft: #4a5568;
-    --brass: #a8763e;
-    --brass-dark: #8a5f2f;
+    --paper: #eaf0f7;
+    --paper-line: #d0dcea;
+    --ink: #12263f;
+    --ink-soft: #48596f;
+    --brass: #2a72ad;
+    --brass-dark: #1f5883;
     --ok: #2f6b4f;
     --warn: #b8863b;
     --fail: #a33b2f;
-    --card: #fbfaf5;
-    --border: #cfc9b4;
+    --card: #f9fbfd;
+    --border: #c3d1e2;
     --radius: 3px;
   }
   * { box-sizing: border-box; }
   body {
     margin: 0;
     background: var(--paper);
-    background-image: repeating-linear-gradient(
-      to bottom,
-      transparent,
-      transparent 27px,
-      var(--paper-line) 28px
-    );
     color: var(--ink);
     font-family: 'Inter', sans-serif;
     min-height: 100vh;
@@ -244,7 +238,7 @@
 <body>
 
 <header>
-  <h1>Field Ledger <span class="stamp" id="folderStamp">not connected</span></h1>
+  <h1>Field Ledger (local test) <span class="stamp" id="folderStamp">not connected</span></h1>
   <div class="auth-area">
     <span id="userLabel" style="font-family:'IBM Plex Mono',monospace;font-size:12px;"></span>
     <button id="signInBtn">Sign in with Google</button>
@@ -960,6 +954,15 @@ document.getElementById('addEntryBtn').addEventListener('click', () => {
   scheduleSave();
 });
 
+// Pre-fill the Start field with the latest End time already logged for this date, so
+// back-to-back entries chain without retyping. Stays blank when the date has no entries,
+// and never overwrites a time the user has already typed in.
+function prefillStartTime(entries) {
+  const startEl = document.getElementById('entryStart');
+  if (startEl.value || !entries.length) return;
+  startEl.value = entries.reduce((latest, e) => (e.endTime > latest ? e.endTime : latest), entries[0].endTime);
+}
+
 function renderTimeLog() {
   document.getElementById('futureBlockWarning').style.display =
     state.selectedDate > todayStr() ? 'block' : 'none';
@@ -980,6 +983,8 @@ function renderTimeLog() {
     .sort((a, b) => a.startTime.localeCompare(b.startTime));
 
   document.getElementById('timeLogEmpty').style.display = entries.length ? 'none' : 'block';
+
+  prefillStartTime(entries);
 
   entries.forEach(e => {
     const tr = document.createElement('tr');
