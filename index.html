@@ -314,6 +314,7 @@
 <nav class="tabs" id="tabNav">
   <button data-tab="timelog" class="active">Time Log</button>
   <button data-tab="tasks">Tasks</button>
+  <button data-tab="followups">Follow-ups</button>
   <button data-tab="import">Import</button>
   <button data-tab="settings">Settings</button>
 </nav>
@@ -462,6 +463,65 @@
     <div class="empty-state" id="taskEmpty" style="display:none;">Nothing here yet.</div>
   </section>
 
+  <!-- FOLLOW-UPS -->
+  <section class="panel" id="panel-followups">
+
+    <div class="row">
+      <div style="flex:1 1 180px; max-width:280px;">
+        <label>Name</label>
+        <input type="text" id="followUpName" placeholder="Person's name" style="width:100%;">
+      </div>
+      <div>
+        <label>Type</label>
+        <select id="followUpType">
+          <option value="tip">Tip O' the Hat</option>
+          <option value="clarification">Clarification</option>
+          <option value="accountability">Accountability</option>
+          <option value="makeitright">Make it Right</option>
+        </select>
+      </div>
+      <div style="flex:4 1 280px;">
+        <label>Note</label>
+        <textarea id="followUpNote" class="freetext" rows="1" placeholder="What prompted this"></textarea>
+      </div>
+      <div>
+        <button class="action" id="addFollowUpBtn">Add follow-up</button>
+      </div>
+    </div>
+
+    <div class="taskTabs" style="margin-bottom:12px;">
+      <button class="ghost sub-active" data-futab="open">Open</button>
+      <button class="ghost" data-futab="done">Done</button>
+      <button class="ghost" data-futab="dropped">Dropped</button>
+    </div>
+
+    <div class="table-scroll">
+      <table id="followUpTable">
+        <colgroup>
+          <col style="width:78px;">
+          <col style="width:18%;">
+          <col style="width:140px;">
+          <col style="width:40%;">
+          <col style="width:110px;">
+          <col style="width:180px;">
+        </colgroup>
+        <thead>
+          <tr>
+            <th>Rank</th>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Note</th>
+            <th>Logged</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="followUpBody"></tbody>
+      </table>
+    </div>
+    <div class="empty-state" id="followUpEmpty" style="display:none;">Nothing here.</div>
+
+  </section>
+
   <!-- IMPORT -->
   <section class="panel" id="panel-import">
     <div class="banner info">
@@ -562,6 +622,7 @@ function emptyLedger() {
     categories: ['General'],
     timeLog: [],
     tasks: [],
+    followUps: [],
     meta: { lastSavedDate: null }
   };
 }
@@ -847,6 +908,7 @@ async function loadMaster() {
     return;
   }
   if (!parsed.meta) parsed.meta = { lastSavedDate: null }; // self-heal files saved before this field existed
+  if (!parsed.followUps) parsed.followUps = []; // self-heal files saved before follow-ups existed
   state.data = parsed;
   state.lastKnownGoodData = JSON.parse(JSON.stringify(parsed));
   state.recordCountHighWaterMark = parsed.timeLog.length + parsed.tasks.length;
@@ -1667,9 +1729,171 @@ function escapeHtml(str) {
   }[s]));
 }
 
+/* =========================================================================
+   FOLLOW-UPS
+   ========================================================================= */
+
+let followUpStatusFilter = 'open';
+
+const FOLLOWUP_TYPE_LABELS = {
+  tip: "Tip O' the Hat",
+  clarification: 'Clarification',
+  accountability: 'Accountability',
+  makeitright: 'Make it Right'
+};
+
+function rankOfFollowUp(f) {
+  const n = Number(f.order);
+  return (f.order === null || f.order === undefined || f.order === '' || !isFinite(n)) ? null : n;
+}
+
+function renderFollowUps() {
+  if (!state.data) return;
+  const followUps = state.data.followUps || [];
+
+  document.querySelectorAll('[data-futab]').forEach(btn => {
+    btn.classList.toggle('sub-active', btn.dataset.futab === followUpStatusFilter);
+  });
+
+  const visible = followUps
+    .filter(f => f.status === followUpStatusFilter)
+    .sort((a, b) => {
+      const ra = rankOfFollowUp(a) === null ? Infinity : rankOfFollowUp(a);
+      const rb = rankOfFollowUp(b) === null ? Infinity : rankOfFollowUp(b);
+      return ra - rb;
+    });
+
+  const body = document.getElementById('followUpBody');
+  const empty = document.getElementById('followUpEmpty');
+  if (!body) return;
+
+  body.innerHTML = '';
+
+  if (visible.length === 0) {
+    empty.style.display = 'block';
+    document.getElementById('followUpTable').style.display = 'none';
+    return;
+  }
+
+  empty.style.display = 'none';
+  document.getElementById('followUpTable').style.display = '';
+
+  visible.forEach(f => {
+    const isEditing = state.editingFollowUpId === f.updateId;
+    const tr = document.createElement('tr');
+
+    if (isEditing) {
+      tr.innerHTML = `
+        <td class="rank-cell">
+          <input type="number" step="any" class="rank-box" value="${rankOfFollowUp(f) === null ? '' : rankOfFollowUp(f)}"
+                 data-fu-rank="${escapeHtml(f.updateId)}" title="Type a number to rank this follow-up.">
+        </td>
+        <td><input type="text" data-edit-fu-name style="width:100%;" value="${escapeHtml(f.name)}"></td>
+        <td>
+          <select data-edit-fu-type>
+            ${Object.entries(FOLLOWUP_TYPE_LABELS).map(([v, l]) =>
+              `<option value="${v}" ${f.type === v ? 'selected' : ''}>${escapeHtml(l)}</option>`
+            ).join('')}
+          </select>
+        </td>
+        <td><textarea class="freetext" data-edit-fu-note style="width:100%;">${escapeHtml(f.note || '')}</textarea></td>
+        <td>${f.dateLogged || ''}</td>
+        <td>
+          <button class="ghost" data-save-fu="${escapeHtml(f.updateId)}">Save</button>
+          <button class="ghost" data-cancel-fu>Cancel</button>
+        </td>`;
+    } else {
+      tr.innerHTML = `
+        <td class="rank-cell"><span class="rank-plain">${rankOfFollowUp(f) === null ? '&mdash;' : rankOfFollowUp(f)}</span></td>
+        <td>${escapeHtml(f.name)}</td>
+        <td>${escapeHtml(FOLLOWUP_TYPE_LABELS[f.type] || f.type)}</td>
+        <td class="text-cell">${escapeHtml(f.note || '')}</td>
+        <td>${f.dateLogged || ''}</td>
+        <td>
+          ${f.status === 'open' ? `<button class="ghost" data-done-fu="${escapeHtml(f.updateId)}">Done</button>
+          <button class="ghost" data-drop-fu="${escapeHtml(f.updateId)}">Drop</button>` : ''}
+          <button class="ghost" data-edit-fu="${escapeHtml(f.updateId)}">Edit</button>
+        </td>`;
+    }
+
+    body.appendChild(tr);
+  });
+
+  body.querySelectorAll('[data-fu-rank]').forEach(box => {
+    box.addEventListener('change', () => {
+      const fu = state.data.followUps.find(f => f.updateId === box.dataset.fuRank);
+      if (!fu) return;
+      const val = box.value.trim();
+      fu.order = val === '' ? null : Number(val);
+      renderFollowUps();
+      scheduleSave();
+    });
+  });
+
+  body.querySelectorAll('[data-edit-fu]').forEach(b => b.addEventListener('click', () => {
+    state.editingFollowUpId = b.dataset.editFu; renderFollowUps();
+  }));
+  body.querySelectorAll('[data-cancel-fu]').forEach(b => b.addEventListener('click', () => {
+    state.editingFollowUpId = null; renderFollowUps();
+  }));
+
+  body.querySelectorAll('[data-save-fu]').forEach(b => b.addEventListener('click', () => {
+    const fu = state.data.followUps.find(f => f.updateId === b.dataset.saveFu);
+    if (!fu) return;
+    const row = b.closest('tr');
+    fu.name = row.querySelector('[data-edit-fu-name]').value.trim() || fu.name;
+    fu.type = row.querySelector('[data-edit-fu-type]').value;
+    fu.note = row.querySelector('[data-edit-fu-note]').value.trim();
+    state.editingFollowUpId = null;
+    renderFollowUps();
+    scheduleSave();
+  }));
+
+  body.querySelectorAll('[data-done-fu]').forEach(b => b.addEventListener('click', () => {
+    const fu = state.data.followUps.find(f => f.updateId === b.dataset.doneFu);
+    if (fu) { fu.status = 'done'; renderFollowUps(); scheduleSave(); }
+  }));
+  body.querySelectorAll('[data-drop-fu]').forEach(b => b.addEventListener('click', () => {
+    const fu = state.data.followUps.find(f => f.updateId === b.dataset.dropFu);
+    if (fu) { fu.status = 'dropped'; renderFollowUps(); scheduleSave(); }
+  }));
+}
+
+document.addEventListener('click', e => {
+  const btn = e.target.closest('[data-futab]');
+  if (!btn) return;
+  followUpStatusFilter = btn.dataset.futab;
+  renderFollowUps();
+});
+
+document.getElementById('addFollowUpBtn').addEventListener('click', () => {
+  if (!state.data) return;
+  const name = document.getElementById('followUpName').value.trim();
+  const type = document.getElementById('followUpType').value;
+  const note = document.getElementById('followUpNote').value.trim();
+
+  if (!name) { alert('Name is required.'); return; }
+
+  state.data.followUps.push({
+    updateId: 'app-' + Date.now(),
+    name,
+    type,
+    note,
+    status: 'open',
+    dateLogged: todayStr(),
+    order: Math.max(0, ...state.data.followUps.map(f => rankOfFollowUp(f) === null ? 0 : rankOfFollowUp(f))) + 1
+  });
+
+  document.getElementById('followUpName').value = '';
+  document.getElementById('followUpNote').value = '';
+  renderFollowUps();
+  scheduleSave();
+});
+
 function renderAll() {
   renderTimeLog();
   renderTasks();
+  renderFollowUps();
   renderSettings();
 }
 renderAll();
