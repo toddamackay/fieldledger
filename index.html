@@ -314,7 +314,7 @@
 <nav class="tabs" id="tabNav">
   <button data-tab="timelog" class="active">Time Log</button>
   <button data-tab="tasks">Tasks</button>
-  <button data-tab="followups">Follow-ups</button>
+  <button data-tab="followups">Chats</button>
   <button data-tab="import">Import</button>
   <button data-tab="settings">Settings</button>
 </nav>
@@ -485,7 +485,7 @@
         <textarea id="followUpNote" class="freetext" rows="1" placeholder="What prompted this"></textarea>
       </div>
       <div>
-        <button class="action" id="addFollowUpBtn">Add follow-up</button>
+        <button class="action" id="addFollowUpBtn">Add chat</button>
       </div>
     </div>
 
@@ -1786,7 +1786,7 @@ function renderFollowUps() {
       tr.innerHTML = `
         <td class="rank-cell">
           <input type="number" step="any" class="rank-box" value="${rankOfFollowUp(f) === null ? '' : rankOfFollowUp(f)}"
-                 data-fu-rank="${escapeHtml(f.updateId)}" title="Type a number to rank this follow-up.">
+                 data-fu-rank="${escapeHtml(f.updateId)}" title="Type a number to rank this chat.">
         </td>
         <td><input type="text" data-edit-fu-name style="width:100%;" value="${escapeHtml(f.name)}"></td>
         <td>
