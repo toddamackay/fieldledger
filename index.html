@@ -1622,7 +1622,8 @@ document.getElementById('applyImportBtn').addEventListener('click', () => {
   if (!pendingImport) return;
   const existingIds = new Set([
     ...state.data.timeLog.map(r => r.updateId),
-    ...state.data.tasks.map(r => r.updateId)
+    ...state.data.tasks.map(r => r.updateId),
+    ...(state.data.followUps || []).map(r => r.updateId)
   ]);
 
   pendingImport.forEach(r => {
@@ -1630,13 +1631,24 @@ document.getElementById('applyImportBtn').addEventListener('click', () => {
     if (r.action === 'add') {
       if (r.recordType === 'task') {
         state.data.tasks.push(Object.assign({ status: 'active', order: state.data.tasks.length }, stripMeta(r)));
+      } else if (r.recordType === 'chat') {
+        if (!state.data.followUps) state.data.followUps = [];
+        state.data.followUps.push(Object.assign({ status: 'open', order: state.data.followUps.length }, stripMeta(r)));
       } else {
         state.data.timeLog.push(stripMeta(r));
       }
     } else if (r.action === 'modify') {
-      const list = r.recordType === 'task' ? state.data.tasks : state.data.timeLog;
-      const idx = list.findIndex(x => x.updateId === r.updateId);
-      if (idx >= 0) Object.assign(list[idx], stripMeta(r));
+      if (r.recordType === 'task') {
+        const idx = state.data.tasks.findIndex(x => x.updateId === r.updateId);
+        if (idx >= 0) Object.assign(state.data.tasks[idx], stripMeta(r));
+      } else if (r.recordType === 'chat') {
+        if (!state.data.followUps) state.data.followUps = [];
+        const idx = state.data.followUps.findIndex(x => x.updateId === r.updateId);
+        if (idx >= 0) Object.assign(state.data.followUps[idx], stripMeta(r));
+      } else {
+        const idx = state.data.timeLog.findIndex(x => x.updateId === r.updateId);
+        if (idx >= 0) Object.assign(state.data.timeLog[idx], stripMeta(r));
+      }
     }
   });
 
